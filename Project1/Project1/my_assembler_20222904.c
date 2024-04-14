@@ -230,24 +230,92 @@ int init_input(char *input[], int *input_length, const char *input_dir) {
  * assem_pass2 과정에서 사용하기 위한 심볼 테이블 및 리터럴 테이블을 생성한다.
  */
 int assem_pass1(const inst *inst_table[], int inst_table_length,
-                const char *input[], int input_length, token *tokens[],
-                int *tokens_length, symbol *symbol_table[],
-                int *symbol_table_length, literal *literal_table[],
-                int *literal_table_length) {
-    
-    int token_size = 0, err;
+                const char *input[], int input_length, 
+                token *tokens[], int *tokens_length, 
+                symbol *symbol_table[], int *symbol_table_length, 
+                literal *literal_table[], int *literal_table_length) {
+    int token_cnt = 0, symbol_cnt = 0; 
+    int loccnt = 0; // location counter
+    int inst_idx, err;
+    token* tok;
+    symbol* sb;
+
     for (int i = 0; i < input_length; i++) {
         if (input[i][0] == '.') continue; // '.'으로 시작하는 라인은 주석으로 판단
         printf("%s\n", input[i]);
-        token* tok;
         if ((tok = (token*)malloc(sizeof(token))) == NULL) return -2;
-        if ((err = token_parsing(input[i], tok, inst_table, inst_table_length)) < 0) return err;
-        tokens[token_size] = tok;
-        
 
-        token_size++;
+        // Parsing
+        if ((err = token_parsing(input[i], tok, inst_table, inst_table_length)) < 0) return err;
+        tokens[token_cnt] = tok;
+        token_cnt++;
+
+        // 레이블 처리
+        if (tok->label != NULL) {
+            if (strlen(tok->label) >= 10) return -5; // exceed symbol length
+            // symbol table에 존재하는지 확인
+            // 존재한다면 에러
+            // 존재하지 않는다면 symbol table에 loccnt와 함께 삽입
+            // TODO: 각 control section 별로 따로 symbol 정의해야함.
+            for (int s = 0; s < symbol_cnt; s++)
+                if (strcmp(symbol_table[s]->name, tok->label) == 0) {
+                    fprintf(stderr, "line #%d : symbol '%s' is duplicated\n", i, tok->label);
+                    return -3; // duplicated symbol
+                }
+            if ((sb = (symbol*)malloc(sizeof(symbol))) == NULL) return -2;
+            sb->addr = loccnt;
+            strcpy(sb->name, tok->label);
+            symbol_table[symbol_cnt] = sb;
+            symbol_cnt++;
+        }
+
+        // Increase Location Counter
+        if (tok->operator == NULL) continue;
+        if ((inst_idx = search_opcode(tok->operator, inst_table, inst_table_length)) >= 0) {
+            loccnt += inst_table[inst_idx]->format;
+            if (tok->operator[0] == '+') loccnt++;
+        }
+        else if (strcmp(tok->operator, "START") == 0 && tok->operand[0] != NULL) {
+            loccnt = atoi(tok->operand[0]); // init Location Counter
+        }
+        else if (strcmp(tok->operator, "END") == 0) {
+            break;
+        }
+        else if (strcmp(tok->operator, "WORD") == 0) {
+            loccnt += 3;
+        }
+        else if (strcmp(tok->operator, "RESW") == 0 && tok->operand[0] != NULL) {
+            loccnt += 3 * atoi(tok->operand[0]);
+        }
+        else if (strcmp(tok->operator, "RESB") == 0 && tok->operand[0] != NULL) {
+            loccnt += atoi(tok->operand[0]);
+        }
+        else if (strcmp(tok->operator, "BYTE") == 0 && tok->operand[0] != NULL) {
+            loccnt += strlen(tok->operand[0]) - 3; // X, 따옴표 2개 총 3개 제외
+        }
+        else if (strcmp(tok->operator, "EXTDEF") == 0) {
+            // TODO
+        }
+        else if (strcmp(tok->operator, "EXTREF") == 0) {
+            // TODO
+        }
+        else if (strcmp(tok->operator, "LTORG") == 0) {
+            // TODO
+        }
+        else if (strcmp(tok->operator, "EQU") == 0) {
+            // TODO
+        }
+        else if (strcmp(tok->operator, "CSECT") == 0) {
+            // TODO
+        }
+        else {
+            fprintf(stderr, "line #%d : '%s' is not defined\n", i, tok->operator);
+            return -4;
+        }
+        printf("loccnt : %X\n\n", loccnt);
     }
-    *tokens_length = token_size;
+    *tokens_length = token_cnt;
+    *symbol_table_length = symbol_cnt;
 
     return 0;
 }
@@ -311,6 +379,21 @@ int token_parsing(const char *input, token *tok, const inst *inst_table[],
         tok->operand[i] = s;
         offset += len + 1;
     }
+
+    // [nixbpe]
+    tok->nixbpe = 0;
+    if (inst_idx >= 0 && tok->operand[0] != NULL) {
+        char c = tok->operand[0][0];
+        if (c == '@') tok->nixbpe += (1 << 5);      // 10 0000
+        else if (c == '#') tok->nixbpe += (1 << 4); // 01 0000
+        else tok->nixbpe += (3 << 4);               // 11 0000
+
+        if (opnd_cnt > 0 && strcmp(tok->operand[opnd_cnt - 1], "X") == 0) 
+            tok->nixbpe += (1 << 3); // 00 1000
+    }
+
+    if (tok->operator != NULL && tok->operator[0] == '+')
+        tok->nixbpe += 1;
     return 0;
 }
 
@@ -332,7 +415,6 @@ int search_opcode(const char *str, const inst *inst_table[],
     int offset = str[0] == '+' ? 1 : 0;
 
     for (int i = 0; i < inst_table_length; i++) {
-        //printf("search: %s %s\n", str + offset, inst_table[i]->str);
         if (strcmp(str + offset, inst_table[i]->str) == 0)
             return i;
     }

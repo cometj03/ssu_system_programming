@@ -60,6 +60,7 @@ typedef struct _symbol {
     char name[10]; /** 심볼의 이름 */
     int addr;      /** 심볼의 주소 */
     /* add fields if needed */
+    
 } symbol;
 
 /**
