@@ -21,6 +21,9 @@
     <ClCompile Include="my_assembler_20222904.c">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="my_assembler_parsing.c">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="input.txt">
@@ -30,6 +33,9 @@
       <Filter>리소스 파일</Filter>
     </Text>
     <Text Include="output_20222904.txt">
+      <Filter>리소스 파일</Filter>
+    </Text>
+    <Text Include="inst_table-1.txt">
       <Filter>리소스 파일</Filter>
     </Text>
   </ItemGroup>

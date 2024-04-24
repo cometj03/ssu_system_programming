@@ -1,22 +1,33 @@
 /**
- * @file my_assembler_20222904.c
- * @date 2024-04-09
+ * @author Enoch Jung (github.com/enochjung)
+ * @file my_assembler_parsing.c
+ * @date 2024-04-15
  * @version 0.1.0
  *
- * @brief SIC/XE 소스코드를 object code로 변환하는 프로그램
- *
- * @details
- * SIC/XE 소스코드를 해당 머신에서 동작하도록 object code로 변환하는
- * 프로그램이다. 파일 내에서 사용되는 문자열 "00000000"에는 자신의 학번을
- * 기입한다.
+ * @brief 조교가 구현한 SIC/XE 코드 파싱 예시
  */
-#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 /* 파일명의 "00000000"은 자신의 학번으로 변경할 것 */
-#include "my_assembler_20222904.h"
+#include "my_assembler_parsing_20222904.h"
+
+#define MAX_COMMENT_SIZE 100
+
+#define ERR_FILE_IO_FAIL -100
+#define ERR_ALLOCATION_FAIL -200
+#define ERR_ARRAY_OVERFLOW -1000
+#define ERR_ILLEGAL_OPERATOR -10200
+#define ERR_ILLEGAL_OPERAND_FORMAT -10300
+
+static int add_inst_to_table(inst *inst_table[], int *inst_table_length,
+                             const char *buffer);
+static int token_operand_parsing(const char *operand_input,
+                                 int operand_input_length, char *operand[]);
+static int write_opcode_output(FILE *fp, const token *tok,
+                               const inst *inst_table[], int inst_table_length);
 
 /**
  * @brief 사용자로부터 SIC/XE 소스코드를 받아서 object code를 출력한다.
@@ -47,7 +58,8 @@ int main(int argc, char **argv) {
     int literal_table_length;
 
     /** 오브젝트 코드를 저장하는 변수 */
-    object_code *obj_code = NULL;
+    /** 파싱 과제에서는 불필요함 */
+    // object_code *obj_code = (object_code *)malloc(sizeof(object_code));
 
     int err = 0;
 
@@ -77,10 +89,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /** 프로젝트1에서는 불필요함 */
-    /*
-    if ((err = make_opcode_output("output_opcode.txt", (const token **)tokens,
-                                  tokens_length, (const inst **)inst_table,
+    if ((err = make_opcode_output(NULL, (const token **)tokens, tokens_length,
+                                  (const inst **)inst_table,
                                   inst_table_length)) < 0) {
         fprintf(stderr,
                 "make_opcode_output: opcode 파일 출력 과정에서 실패했습니다. "
@@ -88,8 +98,9 @@ int main(int argc, char **argv) {
                 err);
         return -1;
     }
-    */
 
+    /** 파싱 과제에서는 불필요함 */
+    /*
     if ((err = make_symbol_table_output("output_symtab.txt",
                                         (const symbol **)symbol_table,
                                         symbol_table_length)) < 0) {
@@ -129,6 +140,9 @@ int main(int argc, char **argv) {
                 err);
         return -1;
     }
+    */
+
+    /** 메모리 해제따위 */
 
     return 0;
 }
@@ -151,28 +165,70 @@ int main(int argc, char **argv) {
  */
 int init_inst_table(inst *inst_table[], int *inst_table_length,
                     const char *inst_table_dir) {
-    FILE* fp;
-    inst* ins;
-    char buffer[20], str[10] = { 0 }, opcode[10] = { 0 };
+    /** 전 귀찮아서 지시어도 inst_table.txt에 때려박았습니다 */
+    FILE *fp;
+    int err;
 
-    if ((fp = fopen(inst_table_dir, "rb")) == NULL) {
-        return -1;
-    }
+    char buffer[20];
 
-    *inst_table_length = 0;
+    if ((fp = fopen(inst_table_dir, "r")) == NULL) return ERR_FILE_IO_FAIL;
 
     while (!feof(fp)) {
         fgets(buffer, 20, fp);
-
-        if ((ins = (inst*)malloc(sizeof(inst))) == NULL) return -2;
-        sscanf(buffer, "%s %d %d %s", str, &ins->ops, &ins->format, opcode);
-        strcpy(ins->str, str);
-        ins->op = (unsigned char)strtol(opcode, NULL, 16); // 16진수 문자열을 정수(unsigned char)로 변환
-        inst_table[*inst_table_length] = ins;
-        ++(*inst_table_length);
+        err = add_inst_to_table(inst_table, inst_table_length, buffer);
+        if (err != 0) {
+            fclose(fp);
+            return err;
+        }
     }
 
-    fclose(fp);
+    if (fclose(fp) != 0) return ERR_FILE_IO_FAIL;
+    err = 0;
+
+    return 0;
+}
+
+/**
+ * @brief inst_table.txt의 라인 하나를 입력으로 받아, 해당하는 instruction
+ * 정보를 inst_table에 저장함.
+ */
+static int add_inst_to_table(inst *inst_table[], int *inst_table_length,
+                             const char *buffer) {
+    char name[10];
+    char ops[10];
+    int format;
+    char op[10];
+
+    if (*inst_table_length == MAX_INST_TABLE_LENGTH) return ERR_ARRAY_OVERFLOW;
+
+    sscanf(buffer, "%s %s %d %s\n", name, ops, &format, op);
+
+    if ((inst_table[*inst_table_length] = (inst *)malloc(sizeof(inst))) == NULL)
+        return ERR_ALLOCATION_FAIL;
+
+    memcpy(inst_table[*inst_table_length]->str, name, 9);
+    inst_table[*inst_table_length]->str[9] = '\0';
+
+    /** !제 마음대로 저장했습니다. 여기선 ops가 operand 개수가 아닙니다! */
+    if (ops[0] == '-')
+        inst_table[*inst_table_length]->ops = 0;
+    else if (ops[0] == 'M')
+        inst_table[*inst_table_length]->ops = 1;
+    else if (ops[0] == 'N')
+        inst_table[*inst_table_length]->ops = 3;
+    else if (ops[1] == 'R')
+        inst_table[*inst_table_length]->ops = 4;
+    else if (ops[1] == 'N')
+        inst_table[*inst_table_length]->ops = 5;
+    else
+        inst_table[*inst_table_length]->ops = 2;
+
+    inst_table[*inst_table_length]->format = format;
+
+    inst_table[*inst_table_length]->op = (char)strtol(op, NULL, 16);
+
+    ++(*inst_table_length);
+
     return 0;
 }
 
@@ -186,27 +242,27 @@ int init_inst_table(inst *inst_table[], int *inst_table_length,
  * @return 오류 코드 (정상 종료 = 0)
  */
 int init_input(char *input[], int *input_length, const char *input_dir) {
-    FILE* fp;
-    char buf[1000] = { 0, }, *line;
-    int i = 0;
-    if ((fp = fopen(input_dir, "rb")) == NULL) {
-        return -1;
+    FILE *fp;
+
+    char buffer[250];
+    int length;
+
+    if ((fp = fopen(input_dir, "r")) == NULL) return ERR_FILE_IO_FAIL;
+
+    while (!feof(fp)) {
+        if (fgets(buffer, 249, fp) == NULL) break;
+        buffer[249] = '\0';
+        length = (int)strlen(buffer);
+        if ((input[*input_length] = (char *)malloc(length + 1)) == NULL) {
+            fclose(fp);
+            return ERR_ALLOCATION_FAIL;
+        }
+        sscanf(buffer, "%[^\r^\n]", input[*input_length]);
+
+        ++(*input_length);
     }
 
-    while (EOF != fscanf(fp, "%[^\r\n]", buf)) {
-        if ((line = (char*)malloc(strlen(buf))) == NULL) return -2;
-        strcpy(line, buf);
-        input[i] = line;
-        i++;
-        
-        // 개행문자 읽기
-        // \r\n 일 수 있으므로 '\n'이 나올 떄까지 읽는다.
-        char c;
-        do { c = fgetc(fp); } while (c != '\n' && c != EOF);
-    }
-    *input_length = i;
-
-    fclose(fp);
+    if (fclose(fp) != 0) return ERR_FILE_IO_FAIL;
 
     return 0;
 }
@@ -233,96 +289,22 @@ int init_input(char *input[], int *input_length, const char *input_dir) {
  * assem_pass2 과정에서 사용하기 위한 심볼 테이블 및 리터럴 테이블을 생성한다.
  */
 int assem_pass1(const inst *inst_table[], int inst_table_length,
-                const char *input[], int input_length, 
-                token *tokens[], int *tokens_length, 
-                symbol *symbol_table[], int *symbol_table_length, 
-                literal *literal_table[], int *literal_table_length) {
-    int token_cnt = 0, symbol_cnt = 0; 
-    int locctr = 0; // location counter
-    int inst_idx, err;
-    token* tok;
-    symbol* sb;
+                const char *input[], int input_length, token *tokens[],
+                int *tokens_length, symbol *symbol_table[],
+                int *symbol_table_length, literal *literal_table[],
+                int *literal_table_length) {
+    /** 파싱 과제에서는 symbol_table 및 literal_table 세팅을 수행하지 않음 */
+    int err;
 
-    for (int i = 0; i < input_length; i++) {
-        if (input[i][0] == '.') continue; // '.'으로 시작하는 라인은 주석으로 판단
-        printf("%s\n", input[i]);
-        if ((tok = (token*)malloc(sizeof(token))) == NULL) return -2;
-
-        // Parsing
-        if ((err = token_parsing(input[i], tok, inst_table, inst_table_length)) < 0) return err;
-        tokens[token_cnt] = tok;
-        token_cnt++;
-
-        // 레이블 처리
-        if (tok->label != NULL) {
-            if (strlen(tok->label) > 6) {
-                fprintf(stderr, "line #%d : label '%s' is too long. label's length must be <= 6\n", i, tok->label);
-                return -5; // exceed symbol length
-            }
-            // symbol table에 존재하는지 확인
-            // 존재한다면 에러
-            // 존재하지 않는다면 symbol table에 loccnt와 함께 삽입
-            // TODO: 각 control section 별로 따로 symbol 정의해야함.
-            for (int s = 0; s < symbol_cnt; s++)
-                if (strcmp(symbol_table[s]->name, tok->label) == 0) {
-                    fprintf(stderr, "line #%d : symbol '%s' is duplicated\n", i, tok->label);
-                    return -3; // duplicated symbol
-                }
-            if ((sb = (symbol*)malloc(sizeof(symbol))) == NULL) return -2;
-            sb->addr = locctr;
-            strcpy(sb->name, tok->label);
-            // sb->rflag = ?; // TODO
-            // strcpy(sb->csect_name, ...); // TODO
-            symbol_table[symbol_cnt] = sb;
-            symbol_cnt++;
-        }
-
-        // Increase Location Counter
-        if (tok->operator == NULL) continue;
-        if ((inst_idx = search_opcode(tok->operator, inst_table, inst_table_length)) >= 0) {
-            locctr += inst_table[inst_idx]->format;
-            if (tok->operator[0] == '+') locctr++;
-        }
-        else if (strcmp(tok->operator, "START") == 0 && tok->operand[0] != NULL) {
-            locctr = atoi(tok->operand[0]); // init Location Counter
-        }
-        else if (strcmp(tok->operator, "END") == 0) {
-            break;
-        }
-        else if (strcmp(tok->operator, "WORD") == 0) {
-            locctr += 3;
-        }
-        else if (strcmp(tok->operator, "RESW") == 0 && tok->operand[0] != NULL) {
-            locctr += 3 * atoi(tok->operand[0]);
-        }
-        else if (strcmp(tok->operator, "RESB") == 0 && tok->operand[0] != NULL) {
-            locctr += atoi(tok->operand[0]);
-        }
-        else if (strcmp(tok->operator, "BYTE") == 0 && tok->operand[0] != NULL) {
-            locctr += strlen(tok->operand[0]) - 3; // X, 따옴표 2개 총 3개 제외
-        }
-        else if (strcmp(tok->operator, "EXTDEF") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "EXTREF") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "LTORG") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "EQU") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "CSECT") == 0) {
-            // TODO
-        }
-        else {
-            fprintf(stderr, "line #%d : '%s' is not defined\n", i, tok->operator);
-            return -4;
-        }
+    for (int i = 0; i < input_length; ++i) {
+        if ((tokens[i] = (token *)malloc(sizeof(token))) == NULL)
+            return ERR_ALLOCATION_FAIL;
+        if ((err = token_parsing(input[i], tokens[i], inst_table,
+                                 inst_table_length)) != 0)
+            return err;
     }
-    *tokens_length = token_cnt;
-    *symbol_table_length = symbol_cnt;
+
+    *tokens_length = input_length;
 
     return 0;
 }
@@ -336,71 +318,197 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
  * @param inst_table_length 기계어 목록 테이블의 길이
  * @return 오류 코드 (정상 종료 = 0)
  */
+#define PARSE_WITHOUT_SCANF
 int token_parsing(const char *input, token *tok, const inst *inst_table[],
                   int inst_table_length) {
+    int input_length = strlen(input);
 
-    char label[100] = { 0 }, inst_str[100] = { 0 }, opnd[100] = { 0 }, comment[100] = { 0 };
-    
-    if (input[0] == '\t' || input[0] == ' ') {
-        // 공백 문자로 시작하면 레이블이 존재하지 않는다고 판단
-        sscanf(input, "\t%[^\t]\t%[^\t]\t%[^\n]", inst_str, opnd, comment);
-        tok->label = NULL;
+    tok->label = NULL;
+    tok->operator= NULL;
+    tok->operand[0] = NULL;
+    tok->operand[1] = NULL;
+    tok->operand[2] = NULL;
+    tok->comment = NULL;
+
+    if (input[0] == '.') {
+        if ((tok->comment = (char *)malloc(input_length)) == NULL)
+            return ERR_ALLOCATION_FAIL;
+        sscanf(input + 1, " %[^\0]", tok->comment);
+        tok->comment[input_length] = '\0';
+    } else {
+#ifdef PARSE_WITHOUT_SCANF
+        /** 이렇게 루프 돌면서 직접 파싱하는 걸 권장합니다 */
+        int token_cnt = 0;
+        for (int st = 0; st < input_length && token_cnt < 3; ++st) {
+            int end = st;
+            for (; input[end] != '\t' && input[end] != '\0'; ++end)
+                ;
+
+            switch (token_cnt) {
+                case 0:
+                    if (st < end) {
+                        if ((tok->label = (char *)malloc(end - st + 1)) == NULL)
+                            return ERR_ALLOCATION_FAIL;
+                        memcpy(tok->label, input + st, end - st);
+                        tok->label[end - st] = '\0';
+                    }
+                    break;
+
+                case 1:
+                    if (st < end) {
+                        if ((tok->operator=(char *) malloc(end - st + 1)) ==
+                            NULL)
+                            return ERR_ALLOCATION_FAIL;
+                        memcpy(tok->operator, input + st, end - st);
+                        tok->operator[end - st] = '\0';
+                    }
+                    break;
+
+                case 2:
+                    if (st < end) {
+                        int err;
+                        if ((err = token_operand_parsing(input + st, end - st,
+                                                         tok->operand)) != 0)
+                            return err;
+                    }
+
+                    st = end + 1;
+                    end = input_length;
+                    if (st < end) {
+                        if ((tok->comment = (char *)malloc(end - st + 1)) ==
+                            NULL)
+                            return ERR_ALLOCATION_FAIL;
+                        memcpy(tok->comment, input + st, end - st);
+                        tok->comment[end - st] = '\0';
+                    }
+            }
+
+            ++token_cnt;
+            st = end;
+        }
+#else
+        /** 전 귀찮아서 scanf로 했었습니다 */
+        char label[100] = {};
+        char opr[100] = {};
+        char opd[100] = {};
+        char comment[100] = {};
+
+        const char *str = input;
+
+        int n = 0;
+        sscanf(str, "%[^\t]%n", label, &n);
+        str += (str[n] != '\0' ? n + 1 : n);
+        n = 0;
+        sscanf(str, "%[^\t]%n", opr, &n);
+        str += (str[n] != '\0' ? n + 1 : n);
+        n = 0;
+        sscanf(str, "%[^\t]%n", opd, &n);
+        str += (str[n] != '\0' ? n + 1 : n);
+        sscanf(str, "%[^\0]", comment);
+
+        if (label[0] != '\0') {
+            int len = strlen(label);
+            tok->label = (char *)malloc(len + 1);
+            memcpy(tok->label, label, len + 1);
+        }
+        if (opr[0] != '\0') {
+            int len = strlen(opr);
+            tok->operator=(char *) malloc(len + 1);
+            memcpy(tok->operator, opr, len + 1);
+        }
+        if (opd[0] != '\0') {
+            int len = strlen(opd);
+            token_operand_parsing(opd, len, tok->operand);
+        }
+        if (comment[0] != '\0') {
+            int len = strlen(comment);
+            tok->comment = (char *)malloc(len + 1);
+            memcpy(tok->comment, comment, len + 1);
+        }
+#endif
     }
-    else {
-        sscanf(input, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", label, inst_str, opnd, comment);
-        if ((tok->label = (char*)malloc(strlen(label))) == NULL) return -2;
-        strcpy(tok->label, label);
+
+    return 0;
+}
+
+/**
+ * @brief 피연산자 문자열을 파싱하여 operand에 저장함. 문자열은 \0으로 끝나지
+ * 않을 수 있기에, operand_input_length로 문자열의 길이를 전달해야 함.
+ */
+static int token_operand_parsing(const char *operand_input,
+                                 int operand_input_length, char *operand[]) {
+#ifdef PARSE_WITHOUT_SCANF
+    /** 직접 구현해보니 많이 귀찮네요 */
+    int operand_cnt = 0;
+    for (int st = 0; st < operand_input_length; ++st) {
+        int end = st;
+
+        for (; operand_input[end] != ',' && operand_input[end] != '\t' &&
+               operand_input[end] != '\0';
+             ++end)
+            ;
+
+        switch (operand_cnt) {
+            case 0:
+                if ((operand[0] = (char *)malloc(end - st + 1)) == NULL)
+                    return ERR_ALLOCATION_FAIL;
+                memcpy(operand[0], operand_input + st, end - st);
+                operand[0][end - st] = '\0';
+                break;
+
+            case 1:
+                if ((operand[1] = (char *)malloc(end - st + 1)) == NULL)
+                    return ERR_ALLOCATION_FAIL;
+                memcpy(operand[1], operand_input + st, end - st);
+                operand[1][end - st] = '\0';
+                break;
+
+            case 2:
+                if ((operand[2] = (char *)malloc(end - st + 1)) == NULL)
+                    return ERR_ALLOCATION_FAIL;
+                memcpy(operand[2], operand_input + st, end - st);
+                operand[2][end - st] = '\0';
+                if (end != operand_input_length)
+                    return ERR_ILLEGAL_OPERAND_FORMAT;
+                break;
+        }
+
+        ++operand_cnt;
+        st = end;
     }
+#else
+    /** 대충 파싱 */
+    char o0[100] = {};
+    char o1[100] = {};
+    char o2[100] = {};
 
-    // [명령어 복사 단계]
-    int op_len = strlen(inst_str), inst_idx = -1;
-    if (op_len == 0) tok->operator = NULL;
-    else {
-        if ((tok->operator = (char*)malloc(op_len)) == NULL) return -2;
-        strcpy(tok->operator, inst_str);
-        inst_idx = search_opcode(inst_str, inst_table, inst_table_length);
+    const char *str = operand_input;
+
+    int n = 0;
+    sscanf(str, "%[^,]%n", o0, &n);
+    str += (str[n] != '\0' ? n + 1 : n);
+    n = 0;
+    sscanf(str, "%[^,]%n", o1, &n);
+    str += (str[n] != '\0' ? n + 1 : n);
+    sscanf(str, "%[^\0]", o2);
+
+    if (o0[0] != '\0') {
+        int len = strlen(o0);
+        operand[0] = (char *)malloc(len + 1);
+        memcpy(operand[0], o0, len + 1);
     }
-
-    // [comment 복사 단계]
-    int comment_len = strlen(comment);
-    if (comment_len == 0) tok->comment = NULL;
-    else {
-        if ((tok->comment = (char*)malloc(comment_len)) == NULL) return -2;
-        strcpy(tok->comment, comment);
+    if (o1[0] != '\0') {
+        int len = strlen(o1);
+        operand[1] = (char *)malloc(len + 1);
+        memcpy(operand[1], o1, len + 1);
     }
-
-    // [operand 복사 단계]
-    int offset = 0;
-    int opnd_cnt = (inst_idx >= 0 ? inst_table[inst_idx]->ops : MAX_OPERAND_PER_INST);
-    char opnd_buf[30] = { 0 };
-    for (int i = 0; i < MAX_OPERAND_PER_INST; i++)
-        tok->operand[i] = NULL;
-
-    for (int i = 0; i < opnd_cnt; i++) {
-        if (strlen(opnd) <= offset || sscanf(opnd + offset, "%[^,]", opnd_buf) == 0) break;
-        int len = strlen(opnd_buf);
-        if (len == 0) continue;
-        char* s;
-        if ((s = (char*)malloc(len)) == NULL) return -2;
-        strcpy(s, opnd_buf);
-        tok->operand[i] = s;
-        offset += len + 1;
+    if (o2[0] != '\0') {
+        int len = strlen(o2);
+        operand[2] = (char *)malloc(len + 1);
+        memcpy(operand[2], o2, len + 1);
     }
+#endif
 
-    // [nixbpe]
-    tok->nixbpe = 0;
-    if (inst_idx >= 0 && tok->operand[0] != NULL) {
-        char c = tok->operand[0][0];
-        if (c == '@') tok->nixbpe += (1 << 5);      // 10 0000
-        else if (c == '#') tok->nixbpe += (1 << 4); // 01 0000
-        else tok->nixbpe += (3 << 4);               // 11 0000
-
-        if (opnd_cnt > 0 && strcmp(tok->operand[opnd_cnt - 1], "X") == 0) 
-            tok->nixbpe += (1 << 3); // 00 1000
-    }
-
-    if (tok->operator != NULL && tok->operator[0] == '+')
-        tok->nixbpe += 1;
     return 0;
 }
 
@@ -419,11 +527,12 @@ int token_parsing(const char *input, token *tok, const inst *inst_table[],
  */
 int search_opcode(const char *str, const inst *inst_table[],
                   int inst_table_length) {
-    int offset = str[0] == '+' ? 1 : 0;
+    /** 함수명을 search_instruction으로 정했어야 했는데... 강을 많이 건넜네요 */
+    if (str[0] == '+')
+        return search_opcode(str + 1, inst_table, inst_table_length);
 
-    for (int i = 0; i < inst_table_length; i++) {
-        if (strcmp(str + offset, inst_table[i]->str) == 0)
-            return i;
+    for (int i = 0; i < inst_table_length; ++i) {
+        if (strcmp(str, inst_table[i]->str) == 0) return i;
     }
 
     return -1;
@@ -449,7 +558,65 @@ int search_opcode(const char *str, const inst *inst_table[],
 int make_opcode_output(const char *output_dir, const token *tokens[],
                        int tokens_length, const inst *inst_table[],
                        int inst_table_length) {
-    /* add your code */
+    FILE *fp;
+    int err = 0;
+
+    if (output_dir == NULL)
+        fp = stdout;
+    else if ((fp = fopen(output_dir, "w")) == NULL)
+        return ERR_FILE_IO_FAIL;
+
+    for (int i = 0; i < tokens_length; ++i) {
+        if ((err = write_opcode_output(fp, tokens[i], inst_table,
+                                       inst_table_length)) != 0) {
+            break;
+        }
+    }
+
+    if (fp != stdout) {
+        if (fclose(fp) != 0) return ERR_FILE_IO_FAIL;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 토큰 하나에 담긴 정보를 fp에 출력함.
+ */
+static int write_opcode_output(FILE *fp, const token *tok,
+                               const inst *inst_table[],
+                               int inst_table_length) {
+    if (tok->label == NULL && tok->operator== NULL) {
+        fprintf(fp, ".\t%s\n", tok->comment == NULL ? "" : tok->comment);
+        return 0;
+    }
+
+    fprintf(fp, "%-8s%-8s", (tok->label != NULL?tok->label : ""), (tok->operator != NULL?tok->operator:""));
+
+    char buffer[50] = {};
+    if (tok->operand[2] != NULL)
+        sprintf(buffer, "%s,%s,%s", tok->operand[0], tok->operand[1],
+                tok->operand[2]);
+    else if (tok->operand[1] != NULL)
+        sprintf(buffer, "%s,%s", tok->operand[0], tok->operand[1]);
+    else if (tok->operand[0] != NULL)
+        sprintf(buffer, "%s", tok->operand[0]);
+
+    fprintf(fp, "%-26s", buffer);
+
+    if (tok->operator!= NULL) {
+        int inst_idx =
+            search_opcode(tok->operator, inst_table, inst_table_length);
+        if (inst_idx < 0) return ERR_ILLEGAL_OPERATOR;
+
+        if (inst_table[inst_idx]->format > 0) {
+            unsigned char op = inst_table[inst_idx]->op;
+            fprintf(fp, "%02X", op);
+        } else
+            fprintf(fp, "  ");
+    }
+
+    fprintf(fp, "    %s\n", tok->comment != NULL ? tok->comment : "");
 
     return 0;
 }
@@ -535,7 +702,7 @@ int make_literal_table_output(const char *literal_table_dir,
  * @details
  * 오브젝트 코드를 파일로 출력한다. `objectcode_dir`이 NULL인 경우 결과를
  * stdout으로 출력한다. 명세서의 주어진 출력 결과와 완전히 동일해야 한다.
- * 예외적으로 각 라인 뒤쪽의 공백 문자 혹은 개행 문자의 차이는 허용한다.
+ * 예외적으로 각 라인의 뒤쪽 공백 문자 혹은 개행 문자의 차이는 허용한다.
  */
 int make_objectcode_output(const char *objectcode_dir,
                            const object_code *obj_code) {

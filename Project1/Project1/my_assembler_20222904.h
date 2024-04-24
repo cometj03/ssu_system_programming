@@ -60,7 +60,9 @@ typedef struct _symbol {
     char name[10]; /** 심볼의 이름 */
     int addr;      /** 심볼의 주소 */
     /* add fields if needed */
-    
+    int rflag;      /** relative flag. relative address이면 1, 아니면 0 */
+    int csect_name[10]; /** 해당 symbol이 정의된 control section 이름.
+                            rflag == 0이면 정의되지 않음 */
 } symbol;
 
 /**
