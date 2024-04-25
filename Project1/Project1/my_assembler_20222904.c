@@ -187,27 +187,139 @@ int init_inst_table(inst *inst_table[], int *inst_table_length,
  */
 int init_input(char *input[], int *input_length, const char *input_dir) {
     FILE* fp;
-    char buf[1000] = { 0, }, *line;
-    int i = 0;
+    char buffer[250] = { 0, }, *line;
+    
     if ((fp = fopen(input_dir, "rb")) == NULL) {
         return -1;
     }
 
-    while (EOF != fscanf(fp, "%[^\r\n]", buf)) {
-        if ((line = (char*)malloc(strlen(buf))) == NULL) return -2;
-        strcpy(line, buf);
-        input[i] = line;
-        i++;
-        
-        // 개행문자 읽기
-        // \r\n 일 수 있으므로 '\n'이 나올 떄까지 읽는다.
-        char c;
-        do { c = fgetc(fp); } while (c != '\n' && c != EOF);
+    *input_length = 0;
+
+    while (!feof(fp)) {
+        fgets(buffer, 249, fp);
+        if ((line = (char*)malloc(strlen(buffer) + 1)) == NULL) {
+            fclose(fp);
+            return -2;
+        }
+        sscanf(buffer, "%[^\r^\n]", line);
+        input[*input_length] = line;
+        ++(*input_length);
     }
-    *input_length = i;
 
     fclose(fp);
 
+    return 0;
+}
+
+/**
+ * label이 유효한지 체크하는 함수입니다.
+ * - label의 길이는 6보다 작거나 같아야 합니다.
+ * - symbol table에 이미 같은 label이 존재하면 안 됩니다.
+ * 
+ * @return 오류: < 0, 정상 종료 == 0
+ */
+static int check_symbol_valid(const char* label, int line_number,
+                              symbol* symbol_table[], int* symbol_table_length) {
+    if (label == NULL) return -1;
+
+    if (strlen(label) > 6) {
+        fprintf(stderr, "line #%d : label '%s' is too long. label's length must be <= 6\n", line_number, label);
+        return -5; // exceed symbol length
+    }
+
+    // symbol table에 존재하는지 확인
+    // 존재한다면 에러
+    for (int s = 0; s < *symbol_table_length; s++) {
+        if (strcmp(symbol_table[s]->name, label) == 0) {
+            fprintf(stderr, "line #%d : symbol '%s' is duplicated\n", line_number, label);
+            return -3; // duplicated symbol
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * symbol 인스턴스를 생성하여 symbol_table의 마지막에 삽입합니다.
+ */
+static int insert_label_into_symtbl(const char* label, const int* locctr, const char* csect_name,
+                                    symbol* symbol_table[], int* symbol_table_length) {
+    if (label == NULL) return -1;
+
+    symbol* sb;
+    if ((sb = (symbol*)malloc(sizeof(symbol))) == NULL) return -2;
+
+    sb->addr = *locctr;
+    strcpy(sb->name, label);
+    if (csect_name != NULL) {
+        strcpy(sb->csect_name, csect_name);
+        sb->rflag = 1;
+    }
+    else {
+        sb->csect_name[0] = '\0';
+        sb->rflag = 0;
+    }
+    symbol_table[*symbol_table_length] = sb;
+    ++(*symbol_table_length);
+
+    return 0;
+}
+
+/**
+ * literal 인스턴스를 생성하여 literal_table의 마지막에 삽입합니다.
+ */
+static int insert_literal_into_littbl(const char* literal_str, literal* literal_table[], int* literal_table_length) {
+    if (literal_str == NULL) return -1;
+
+    // 중복되는 리터럴은 삽입할 필요 없음
+    for (int i = 0; i < *literal_table_length; i++) {
+        if (strcmp(literal_table[i]->literal, literal_str) == 0)
+            return 0;
+    }
+
+    literal* lit;
+    if ((lit = (literal*)malloc(sizeof(literal))) == NULL) return -2;
+    lit->addr = 0;
+    strcpy(lit->literal, literal_str);
+    literal_table[*literal_table_length] = lit;
+    ++(*literal_table_length);
+    return 0;
+}
+
+/**
+ * @param lit_last_idx 주소가 지정되지 않은 리터럴의 첫 번째 인덱스
+ * @param locctr 현재 위치의 location counter
+ * 
+ * @details
+ * location counter를 적절히 증가시키면서 리터럴 테이블의 리터럴의 주소를 할당해줍니다.
+ */
+static int set_literal_addr(int* lit_last_idx, int* locctr, 
+                            literal* literal_table[], const int* literal_table_length) {
+    // lit_last_idx == literal_table_length이면 모든 리터럴의 주소가 지정되었다는 의미
+    if (*lit_last_idx == *literal_table_length) return 0;
+
+    while (*lit_last_idx < *literal_table_length) {
+        literal* lit = literal_table[*lit_last_idx];
+        lit->addr = *locctr;
+
+        int lit_len = strlen(lit->literal);
+        switch (lit->literal[1]) {
+        case 'C':
+            if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
+                return -10; // wrong literal format
+            *locctr += lit_len - 3;
+            break;
+        case 'X':
+            if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
+                return -10; // wrong literal format
+            *locctr += (lit_len - 3 + 1) / 2;
+            break;
+        default:
+            *locctr += 3; // WORD
+            break;
+        }
+        ++(*lit_last_idx);
+    }
     return 0;
 }
 
@@ -237,93 +349,103 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 token *tokens[], int *tokens_length, 
                 symbol *symbol_table[], int *symbol_table_length, 
                 literal *literal_table[], int *literal_table_length) {
-    int token_cnt = 0, symbol_cnt = 0; 
+    FILE* fp = stdout;
     int locctr = 0; // location counter
-    int inst_idx, err;
+    int err;
+    char* csect_name = NULL; // current control section name
     token* tok;
-    symbol* sb;
+
+    // 주소가 지정되지 않은 리터럴의 첫 번째 인덱스 
+    // (lit_last_idx == *literal_table_length이면 테이블의 모든 리터럴이 주소가 지정되었다는 의미)
+    int lit_last_idx = 0;
+
+    *tokens_length = 0;
+    *symbol_table_length = 0;
+    *literal_table_length = 0;
 
     for (int i = 0; i < input_length; i++) {
         if (input[i][0] == '.') continue; // '.'으로 시작하는 라인은 주석으로 판단
-        printf("%s\n", input[i]);
         if ((tok = (token*)malloc(sizeof(token))) == NULL) return -2;
 
         // Parsing
         if ((err = token_parsing(input[i], tok, inst_table, inst_table_length)) < 0) return err;
-        tokens[token_cnt] = tok;
-        token_cnt++;
+        tokens[*tokens_length] = tok;
+        ++(*tokens_length);
 
         // 레이블 처리
         if (tok->label != NULL) {
-            if (strlen(tok->label) > 6) {
-                fprintf(stderr, "line #%d : label '%s' is too long. label's length must be <= 6\n", i, tok->label);
-                return -5; // exceed symbol length
-            }
-            // symbol table에 존재하는지 확인
-            // 존재한다면 에러
-            // 존재하지 않는다면 symbol table에 loccnt와 함께 삽입
-            // TODO: 각 control section 별로 따로 symbol 정의해야함.
-            for (int s = 0; s < symbol_cnt; s++)
-                if (strcmp(symbol_table[s]->name, tok->label) == 0) {
-                    fprintf(stderr, "line #%d : symbol '%s' is duplicated\n", i, tok->label);
-                    return -3; // duplicated symbol
-                }
-            if ((sb = (symbol*)malloc(sizeof(symbol))) == NULL) return -2;
-            sb->addr = locctr;
-            strcpy(sb->name, tok->label);
-            // sb->rflag = ?; // TODO
-            // strcpy(sb->csect_name, ...); // TODO
-            symbol_table[symbol_cnt] = sb;
-            symbol_cnt++;
+            if ((err = check_symbol_valid(tok->label, i, symbol_table, symbol_table_length)) < 0) return err;
+            if ((err = insert_label_into_symtbl(tok->label, &locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
         }
 
-        // Increase Location Counter
-        if (tok->operator == NULL) continue;
-        if ((inst_idx = search_opcode(tok->operator, inst_table, inst_table_length)) >= 0) {
+        // 리터럴 삽입
+        if (tok->operand[0] != NULL && tok->operand[0][0] == '=') {
+            if ((err = insert_literal_into_littbl(tok->operand[0], literal_table, literal_table_length)) < 0) return err;
+        }
+
+        // 명령어 처리
+        int inst_idx = search_opcode(tok->operator, inst_table, inst_table_length);
+        if (inst_idx == -1) return -4; // unknown operator
+
+        inst* ins = inst_table[inst_idx];
+        if (ins->format == 0) {
+            // 어셈블러 지시어 (format == 0)
+            if (strcmp(tok->operator, "START") == 0 && tok->operand[0] != NULL) {
+                locctr = atoi(tok->operand[0]); // init
+                csect_name = tok->label;
+                if ((err = insert_label_into_symtbl(tok->label, &locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+            }
+            else if (strcmp(tok->operator, "CSECT") == 0) {
+                if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+                locctr = 0;
+                csect_name = tok->label;
+            }
+            else if (strcmp(tok->operator, "END") == 0) {
+                break;
+            }
+            else if (strcmp(tok->operator, "EXTDEF") == 0) {
+                // TODO
+            }
+            else if (strcmp(tok->operator, "EXTREF") == 0) {
+                // TODO
+            }
+            else if (strcmp(tok->operator, "EQU") == 0) {
+                // TODO
+            }
+            else if (strcmp(tok->operator, "LTORG") == 0) {
+                if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+            }
+            else if (strcmp(tok->operator, "RESW") == 0 && tok->operand[0] != NULL) {
+                locctr += atoi(tok->operand[0]) * 3;
+            }
+            else if (strcmp(tok->operator, "RESB") == 0 && tok->operand[0] != NULL) {
+                locctr += atoi(tok->operand[0]);
+            }
+            else if (strcmp(tok->operator, "WORD") == 0) {
+                locctr += 3;
+            }
+            else if (strcmp(tok->operator, "BYTE") == 0 && tok->operand[0] != NULL) {
+                switch (tok->operand[0][0]) {
+                case 'C':
+                    locctr += strlen(tok->operand[0]) - 3; // C, 따옴표 2개 총 3개 제외
+                    break;
+                case 'X':
+                    locctr += (strlen(tok->operand[0]) - 3 + 1) / 2; // X, 따옴표 2개 총 3개 제외 (두 문자 당 1byte)
+                    break;
+                }
+            }
+            else {
+                // error: Unknown Directive
+                return -4;
+            }
+        }
+        else {
             locctr += inst_table[inst_idx]->format;
             if (tok->operator[0] == '+') locctr++;
         }
-        else if (strcmp(tok->operator, "START") == 0 && tok->operand[0] != NULL) {
-            locctr = atoi(tok->operand[0]); // init Location Counter
-        }
-        else if (strcmp(tok->operator, "END") == 0) {
-            break;
-        }
-        else if (strcmp(tok->operator, "WORD") == 0) {
-            locctr += 3;
-        }
-        else if (strcmp(tok->operator, "RESW") == 0 && tok->operand[0] != NULL) {
-            locctr += 3 * atoi(tok->operand[0]);
-        }
-        else if (strcmp(tok->operator, "RESB") == 0 && tok->operand[0] != NULL) {
-            locctr += atoi(tok->operand[0]);
-        }
-        else if (strcmp(tok->operator, "BYTE") == 0 && tok->operand[0] != NULL) {
-            locctr += strlen(tok->operand[0]) - 3; // X, 따옴표 2개 총 3개 제외
-        }
-        else if (strcmp(tok->operator, "EXTDEF") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "EXTREF") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "LTORG") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "EQU") == 0) {
-            // TODO
-        }
-        else if (strcmp(tok->operator, "CSECT") == 0) {
-            // TODO
-        }
-        else {
-            fprintf(stderr, "line #%d : '%s' is not defined\n", i, tok->operator);
-            return -4;
-        }
     }
-    *tokens_length = token_cnt;
-    *symbol_table_length = symbol_cnt;
-
+    if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+    // TODO: 중간 파일 생성
     return 0;
 }
 
@@ -336,60 +458,55 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
  * @param inst_table_length 기계어 목록 테이블의 길이
  * @return 오류 코드 (정상 종료 = 0)
  */
-int token_parsing(const char *input, token *tok, const inst *inst_table[],
-                  int inst_table_length) {
+int token_parsing(const char *input, token *tok, 
+                  const inst *inst_table[], int inst_table_length) {
+    tok->label = NULL;
+    tok->operator = NULL;
+    tok->comment = NULL;
+    for (int i = 0; i < MAX_OPERAND_PER_INST; i++)
+        tok->operand[i] = NULL;
+    tok->nixbpe = 0;
 
-    char label[100] = { 0 }, inst_str[100] = { 0 }, opnd[100] = { 0 }, comment[100] = { 0 };
+    char label[10] = { 0 }, opr[10] = { 0 }, opnd[100] = { 0 }, comment[100] = { 0 };
     
     if (input[0] == '\t' || input[0] == ' ') {
         // 공백 문자로 시작하면 레이블이 존재하지 않는다고 판단
-        sscanf(input, "\t%[^\t]\t%[^\t]\t%[^\n]", inst_str, opnd, comment);
-        tok->label = NULL;
+        sscanf(input, "\t%[^\t]\t%[^\t]\t%[^\0]", opr, opnd, comment);
     }
     else {
-        sscanf(input, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\n]", label, inst_str, opnd, comment);
-        if ((tok->label = (char*)malloc(strlen(label))) == NULL) return -2;
+        sscanf(input, "%[^\t]\t%[^\t]\t%[^\t]\t%[^\0]", label, opr, opnd, comment);
+        if ((tok->label = (char*)malloc(strlen(label) + 1)) == NULL) return -2;
         strcpy(tok->label, label);
     }
 
     // [명령어 복사 단계]
-    int op_len = strlen(inst_str), inst_idx = -1;
-    if (op_len == 0) tok->operator = NULL;
-    else {
-        if ((tok->operator = (char*)malloc(op_len)) == NULL) return -2;
-        strcpy(tok->operator, inst_str);
-        inst_idx = search_opcode(inst_str, inst_table, inst_table_length);
+    if (opr[0] != '\0') {
+        if ((tok->operator = (char*)malloc(strlen(opr) + 1)) == NULL) return -2;
+        strcpy(tok->operator, opr);
     }
 
-    // [comment 복사 단계]
-    int comment_len = strlen(comment);
-    if (comment_len == 0) tok->comment = NULL;
-    else {
-        if ((tok->comment = (char*)malloc(comment_len)) == NULL) return -2;
+    // [comment 복사 단계]    
+    if (comment[0] != '\0') {
+        if ((tok->comment = (char*)malloc(strlen(comment) + 1)) == NULL) return -2;
         strcpy(tok->comment, comment);
     }
 
     // [operand 복사 단계]
-    int offset = 0;
-    int opnd_cnt = (inst_idx >= 0 ? inst_table[inst_idx]->ops : MAX_OPERAND_PER_INST);
-    char opnd_buf[30] = { 0 };
-    for (int i = 0; i < MAX_OPERAND_PER_INST; i++)
-        tok->operand[i] = NULL;
-
-    for (int i = 0; i < opnd_cnt; i++) {
-        if (strlen(opnd) <= offset || sscanf(opnd + offset, "%[^,]", opnd_buf) == 0) break;
-        int len = strlen(opnd_buf);
-        if (len == 0) continue;
-        char* s;
-        if ((s = (char*)malloc(len)) == NULL) return -2;
-        strcpy(s, opnd_buf);
-        tok->operand[i] = s;
-        offset += len + 1;
+    int opnd_cnt = 0;
+    for (int st = 0; opnd[st] != '\0' && opnd_cnt < MAX_OPERAND_PER_INST; st++) {
+        int end = st;
+        while (opnd[end] != ',' && opnd[end] != '\0' && opnd[end] != '\t') end++;
+        int len = end - st;
+        if ((tok->operand[opnd_cnt] = (char*)malloc(len + 1)) == NULL) return -2;
+        memcpy(tok->operand[opnd_cnt], opnd + st, len);
+        tok->operand[opnd_cnt][len] = '\0';
+        ++opnd_cnt;
+        st = end;
     }
 
     // [nixbpe]
-    tok->nixbpe = 0;
-    if (inst_idx >= 0 && tok->operand[0] != NULL) {
+    int inst_idx = search_opcode(opr, inst_table, inst_table_length);
+    if (inst_idx >= 0 && inst_table[inst_idx]->format != 0 && tok->operand[0] != NULL) {
         char c = tok->operand[0][0];
         if (c == '@') tok->nixbpe += (1 << 5);      // 10 0000
         else if (c == '#') tok->nixbpe += (1 << 4); // 01 0000
@@ -398,7 +515,6 @@ int token_parsing(const char *input, token *tok, const inst *inst_table[],
         if (opnd_cnt > 0 && strcmp(tok->operand[opnd_cnt - 1], "X") == 0) 
             tok->nixbpe += (1 << 3); // 00 1000
     }
-
     if (tok->operator != NULL && tok->operator[0] == '+')
         tok->nixbpe += 1;
     return 0;
@@ -419,13 +535,12 @@ int token_parsing(const char *input, token *tok, const inst *inst_table[],
  */
 int search_opcode(const char *str, const inst *inst_table[],
                   int inst_table_length) {
-    int offset = str[0] == '+' ? 1 : 0;
+    if (str[0] == '+') return search_opcode(str + 1, inst_table, inst_table_length);
 
     for (int i = 0; i < inst_table_length; i++) {
-        if (strcmp(str + offset, inst_table[i]->str) == 0)
+        if (strcmp(str, inst_table[i]->str) == 0)
             return i;
     }
-
     return -1;
 }
 
