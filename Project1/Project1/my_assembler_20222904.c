@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
     }
     */
 
-    if ((err = make_symbol_table_output("output_symtab.txt",
+    if ((err = make_symbol_table_output(NULL, // "output_symtab.txt",
                                         (const symbol **)symbol_table,
                                         symbol_table_length)) < 0) {
         fprintf(stderr,
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if ((err = make_literal_table_output("output_littab.txt",
+    if ((err = make_literal_table_output(NULL, // "output_littab.txt",
                                          (const literal **)literal_table,
                                          literal_table_length)) < 0) {
         fprintf(stderr,
@@ -254,14 +254,14 @@ static int check_symbol_valid(const char* label, int line_number,
 /**
  * symbol 인스턴스를 생성하여 symbol_table의 마지막에 삽입합니다.
  */
-static int insert_label_into_symtbl(const char* label, const int* locctr, const char* csect_name,
+static int insert_label_into_symtbl(const char* label, int addr, const char* csect_name,
                                     symbol* symbol_table[], int* symbol_table_length) {
     if (label == NULL) return -1;
 
     symbol* sb;
     if ((sb = (symbol*)malloc(sizeof(symbol))) == NULL) return -2;
 
-    sb->addr = *locctr;
+    sb->addr = addr;
     strcpy(sb->name, label);
     if (csect_name != NULL) {
         strcpy(sb->csect_name, csect_name);
@@ -373,6 +373,50 @@ static int directive(const char* str) {
 }
 
 /**
+ * 'BUFEND-BUFFER'와 같은 수식을 계산하여 그 값을 dest에 대입합니다.
+ * 수식이 '*'이라면 locctr 값을 대입해줍니다.
+ */
+static int calculate_equ(const char* expr, int* dest, int locctr, const symbol* symbol_table[], int symbol_table_length) {
+    if (expr == NULL) return -1;
+
+    // operand가 * 이면 현재 주소
+    if (expr[0] == '*') {
+        *dest = locctr;
+        return 0;
+    }
+
+    int add_flag = 1;
+    char tok_buf[10];
+    symbol* sb = NULL;
+
+    *dest = 0;
+    for (int st = 0; expr[st] != '\0' && st < 10; st++) {
+        int end = st;
+        while (expr[end] != '\0' && expr[end] != '-' && expr[end] != '+') ++end;
+        memcpy(tok_buf, expr + st, end - st);
+        tok_buf[end - st] = '\0';
+
+        // 토큰과 같은 symbol 찾기
+        sb = NULL;
+        for (int i = 0; i < symbol_table_length; i++) {
+            if (strcmp(symbol_table[i]->name, tok_buf) == 0) {
+                sb = symbol_table[i];
+                break;
+            }
+        }
+        if (sb == NULL) return -2;
+
+        if (add_flag) *dest += sb->addr;
+        else *dest -= sb->addr;
+
+        add_flag = (expr[end] == '+');
+        st = end;
+    }
+
+    return 0;
+}
+
+/**
  * @brief 어셈블리 코드을 위한 패스 1 과정을 수행한다.
  *
  * @param inst_table 기계어 목록 테이블의 주소
@@ -416,27 +460,42 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
         if (input[i][0] == '.') continue; // '.'으로 시작하는 라인은 주석으로 판단
         if ((tok = (token*)malloc(sizeof(token))) == NULL) return -2;
 
+        printf("%X\t%s\n", locctr, input[i]);
+
         // Parsing
         if ((err = token_parsing(input[i], tok, inst_table, inst_table_length)) < 0) return err;
+        tok->addr = locctr;
         tokens[*tokens_length] = tok;
         ++(*tokens_length);
 
-        // 레이블 처리
+        int dir = directive(tok->operator);
+        if (dir == DIR_END) break;
+
+        /// [symbol 처리]
         if (tok->label != NULL) {
             if ((err = check_symbol_valid(tok->label, i, symbol_table, symbol_table_length)) < 0) return err;
 
-            // START이거나 CSECT는 아래에서 따로 처리해주기 때문에
-            // 여기서는 넣어주지 않는다
-            if (strcmp(tok->operator, "START") != 0 && strcmp(tok->operator, "CSECT") != 0 &&
-                (err = insert_label_into_symtbl(tok->label, &locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+            if (dir == DIR_EQU && tok->operand[0] != NULL) {
+                int addr;
+                // 수식 계산 후 addr에 넣어준다
+                if (calculate_equ(tok->operand[0], &addr, locctr, symbol_table, *symbol_table_length) < 0) return -5;
+                if ((err = insert_label_into_symtbl(tok->label, addr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+                // EQU이면 더 이상 할 일 없음. 다음 라인으로 넘어가도 된다
+                continue;
+            }
+            else if (dir != DIR_START && dir != DIR_CSECT) {
+                // START이거나 CSECT는 아래에서 따로 처리해주기 때문에
+                // 여기서는 넣어주지 않는다
+                if ((err = insert_label_into_symtbl(tok->label, locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+            }
         }
 
-        // 리터럴 삽입
+        /// [리터럴 삽입]
         if (tok->operand[0] != NULL && tok->operand[0][0] == '=') {
             if ((err = insert_literal_into_littbl(tok->operand[0], literal_table, literal_table_length)) < 0) return err;
         }
 
-        // 명령어 처리
+        /// [명령어 처리]
         int inst_idx = search_opcode(tok->operator, inst_table, inst_table_length);
         if (inst_idx == -1) return -4; // unknown operator
 
@@ -447,41 +506,53 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
             if (dir == DIR_END) break;
 
             switch (dir) {
-            case DIR_START: {
+            case DIR_START:
                 if (tok->operand[0] != NULL) {
                     locctr = atoi(tok->operand[0]); // init
                     csect_name = tok->label;
-                    if ((err = insert_label_into_symtbl(tok->label, &locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+                    if ((err = insert_label_into_symtbl(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
                 }
                 break;
-            }
-            case DIR_CSECT: {
+            case DIR_CSECT:
                 // Control Section이 시작하기 전에 앞에서 쌓인 리터럴 넣어줌
                 if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
                 locctr = 0;
                 csect_name = tok->label;
-                if ((err = insert_label_into_symtbl(tok->label, &locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+                if ((err = insert_label_into_symtbl(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
                 break;
-            }
             case DIR_LTORG: {
+                int before_lit_idx = lit_last_idx;
                 if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+
+                // TODO: 이거 함수로 분리해놓기
+                // LTORG 토큰은 삭제하고 리터럴로 채우기
+                --(*tokens_length);
+                free(tokens[*tokens_length]);
+                for (int i = before_lit_idx; i < *literal_table_length; i++) {
+                    literal* lit = literal_table[i];
+                    token* lit_tok;
+                    if ((lit_tok = (token*)malloc(sizeof(token))) == NULL) return -2;
+                    lit_tok->addr = lit->addr;
+                    if ((lit_tok->label = (char*)malloc(2)) == NULL) return -2;
+                    lit_tok->label[0] = '*';
+                    lit_tok->label[1] = '\0';
+                    if ((lit_tok->operator = (char*)malloc(strlen(lit->literal) + 1)) == NULL) return -2;
+                    strcpy(lit_tok->operator, lit->literal);
+                }
                 break;
             }
-            case DIR_RESW: {
+            case DIR_RESW:
                 if (tok->operand[0] != NULL)
                     locctr += atoi(tok->operand[0]) * 3;
                 break;
-            }
-            case DIR_RESB: {
+            case DIR_RESB:
                 if (tok->operand[0] != NULL)
                     locctr += atoi(tok->operand[0]);
                 break;
-            }
-            case DIR_WORD: {
+            case DIR_WORD:
                 locctr += 3;
                 break;
-            }
-            case DIR_BYTE: {
+            case DIR_BYTE:
                 if (tok->operand[0] != NULL) {
                     switch (tok->operand[0][0]) {
                     case 'C':
@@ -494,30 +565,14 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 }
                 break;
             }
-            case DIR_EXTDEF: {
-
-                break;
-            }
-            case DIR_EXTREF: {
-
-                break;
-            }
-            case DIR_EQU: {
-
-                break;
-            }
-            default:
-                // error: Unknown Directive
-                return -4;
-            }
         }
         else {
             locctr += inst_table[inst_idx]->format;
             if (tok->operator[0] == '+') locctr++;
         }
-    }
+    } // end for
+
     if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
-    // TODO: 중간 파일 생성
     return 0;
 }
 
@@ -567,7 +622,7 @@ int token_parsing(const char *input, token *tok,
     int opnd_cnt = 0;
     for (int st = 0; opnd[st] != '\0' && opnd_cnt < MAX_OPERAND_PER_INST; st++) {
         int end = st;
-        while (opnd[end] != ',' && opnd[end] != '\0' && opnd[end] != '\t') end++;
+        while (opnd[end] != ',' && opnd[end] != '\0' && opnd[end] != '\t') ++end;
         int len = end - st;
         if ((tok->operand[opnd_cnt] = (char*)malloc(len + 1)) == NULL) return -2;
         memcpy(tok->operand[opnd_cnt], opnd + st, len);
@@ -685,7 +740,6 @@ int assem_pass2(const token *tokens[], int tokens_length,
 int make_symbol_table_output(const char *symbol_table_dir,
                              const symbol *symbol_table[],
                              int symbol_table_length) {
-    /* add your code */
     FILE* fp;
     if (symbol_table_dir == NULL) {
         fp = stdout;
@@ -722,7 +776,20 @@ int make_symbol_table_output(const char *symbol_table_dir,
 int make_literal_table_output(const char *literal_table_dir,
                               const literal *literal_table[],
                               int literal_table_length) {
-    /* add your code */
+    FILE* fp;
+    if (literal_table_dir == NULL) {
+        fp = stdout;
+    }
+    else if ((fp = fopen(literal_table_dir, "wb")) == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < literal_table_length; i++) {
+        literal* lit = literal_table[i];
+        fprintf(fp, "%s\t%X\n", lit->literal, lit->addr);
+    }
+
+    if (fp != stdout) fclose(fp);
 
     return 0;
 }

@@ -35,6 +35,9 @@
     <Text Include="output_symtab.txt">
       <Filter>리소스 파일</Filter>
     </Text>
+    <Text Include="output_littab.txt">
+      <Filter>리소스 파일</Filter>
+    </Text>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="my_assembler_20222904.h">

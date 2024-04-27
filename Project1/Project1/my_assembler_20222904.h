@@ -45,6 +45,8 @@ typedef struct _token {
     char *operand[MAX_OPERAND_PER_INST]; /** operand들을 가리키는 포인터 배열 */
     char *comment; /** comment를 가리키는 포인터 */
     char nixbpe;   /** 특수 bit 정보 */
+    /** 필드 추가 */
+    int addr;
 } token;
 
 /**
