@@ -18,6 +18,18 @@
 /* 파일명의 "00000000"은 자신의 학번으로 변경할 것 */
 #include "my_assembler_20222904.h"
 
+#define DIR_START 1
+#define DIR_CSECT 2
+#define DIR_LTORG 3
+#define DIR_RESW 4
+#define DIR_RESB 5
+#define DIR_WORD 6
+#define DIR_BYTE 7
+#define DIR_END 8
+#define DIR_EXTDEF 9
+#define DIR_EXTREF 10
+#define DIR_EQU 11
+
 /**
  * @brief 사용자로부터 SIC/XE 소스코드를 받아서 object code를 출력한다.
  *
@@ -47,7 +59,7 @@ int main(int argc, char **argv) {
     int literal_table_length;
 
     /** 오브젝트 코드를 저장하는 변수 */
-    object_code *obj_code = NULL;
+    object_code* obj_code = (object_code*)malloc(sizeof(object_code));
 
     int err = 0;
 
@@ -307,12 +319,12 @@ static int set_literal_addr(int* lit_last_idx, int* locctr,
         case 'C':
             if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
                 return -10; // wrong literal format
-            *locctr += lit_len - 3;
+            *locctr += lit_len - 4;
             break;
         case 'X':
             if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
                 return -10; // wrong literal format
-            *locctr += (lit_len - 3 + 1) / 2;
+            *locctr += (lit_len - 4 + 1) / 2;
             break;
         default:
             *locctr += 3; // WORD
@@ -321,6 +333,43 @@ static int set_literal_addr(int* lit_last_idx, int* locctr,
         ++(*lit_last_idx);
     }
     return 0;
+}
+
+static int directive(const char* str) {
+    if (strcmp(str, "START") == 0) {
+        return DIR_START;
+    }
+    else if (strcmp(str, "CSECT") == 0) {
+        return DIR_CSECT;
+    }
+    else if (strcmp(str, "LTORG") == 0) {
+        return DIR_LTORG;
+    }
+    else if (strcmp(str, "RESW") == 0) {
+        return DIR_RESW;
+    }
+    else if (strcmp(str, "RESB") == 0) {
+        return DIR_RESB;
+    }
+    else if (strcmp(str, "WORD") == 0) {
+        return DIR_WORD;
+    }
+    else if (strcmp(str, "BYTE") == 0) {
+        return DIR_BYTE;
+    }
+    else if (strcmp(str, "END") == 0) {
+        return DIR_END;
+    }
+    else if (strcmp(str, "EXTDEF") == 0) {
+        return DIR_EXTDEF;
+    }
+    else if (strcmp(str, "EXTREF") == 0) {
+        return DIR_EXTREF;
+    }
+    else if (strcmp(str, "EQU") == 0) {
+        return DIR_EQU;
+    }
+    return -1;
 }
 
 /**
@@ -375,7 +424,11 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
         // 레이블 처리
         if (tok->label != NULL) {
             if ((err = check_symbol_valid(tok->label, i, symbol_table, symbol_table_length)) < 0) return err;
-            if ((err = insert_label_into_symtbl(tok->label, &locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+
+            // START이거나 CSECT는 아래에서 따로 처리해주기 때문에
+            // 여기서는 넣어주지 않는다
+            if (strcmp(tok->operator, "START") != 0 && strcmp(tok->operator, "CSECT") != 0 &&
+                (err = insert_label_into_symtbl(tok->label, &locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
         }
 
         // 리터럴 삽입
@@ -390,51 +443,70 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
         inst* ins = inst_table[inst_idx];
         if (ins->format == 0) {
             // 어셈블러 지시어 (format == 0)
-            if (strcmp(tok->operator, "START") == 0 && tok->operand[0] != NULL) {
-                locctr = atoi(tok->operand[0]); // init
-                csect_name = tok->label;
-                if ((err = insert_label_into_symtbl(tok->label, &locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+            int dir = directive(tok->operator);
+            if (dir == DIR_END) break;
+
+            switch (dir) {
+            case DIR_START: {
+                if (tok->operand[0] != NULL) {
+                    locctr = atoi(tok->operand[0]); // init
+                    csect_name = tok->label;
+                    if ((err = insert_label_into_symtbl(tok->label, &locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+                }
+                break;
             }
-            else if (strcmp(tok->operator, "CSECT") == 0) {
+            case DIR_CSECT: {
+                // Control Section이 시작하기 전에 앞에서 쌓인 리터럴 넣어줌
                 if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
                 locctr = 0;
                 csect_name = tok->label;
-            }
-            else if (strcmp(tok->operator, "END") == 0) {
+                if ((err = insert_label_into_symtbl(tok->label, &locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
                 break;
             }
-            else if (strcmp(tok->operator, "EXTDEF") == 0) {
-                // TODO
-            }
-            else if (strcmp(tok->operator, "EXTREF") == 0) {
-                // TODO
-            }
-            else if (strcmp(tok->operator, "EQU") == 0) {
-                // TODO
-            }
-            else if (strcmp(tok->operator, "LTORG") == 0) {
+            case DIR_LTORG: {
                 if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+                break;
             }
-            else if (strcmp(tok->operator, "RESW") == 0 && tok->operand[0] != NULL) {
-                locctr += atoi(tok->operand[0]) * 3;
+            case DIR_RESW: {
+                if (tok->operand[0] != NULL)
+                    locctr += atoi(tok->operand[0]) * 3;
+                break;
             }
-            else if (strcmp(tok->operator, "RESB") == 0 && tok->operand[0] != NULL) {
-                locctr += atoi(tok->operand[0]);
+            case DIR_RESB: {
+                if (tok->operand[0] != NULL)
+                    locctr += atoi(tok->operand[0]);
+                break;
             }
-            else if (strcmp(tok->operator, "WORD") == 0) {
+            case DIR_WORD: {
                 locctr += 3;
+                break;
             }
-            else if (strcmp(tok->operator, "BYTE") == 0 && tok->operand[0] != NULL) {
-                switch (tok->operand[0][0]) {
-                case 'C':
-                    locctr += strlen(tok->operand[0]) - 3; // C, 따옴표 2개 총 3개 제외
-                    break;
-                case 'X':
-                    locctr += (strlen(tok->operand[0]) - 3 + 1) / 2; // X, 따옴표 2개 총 3개 제외 (두 문자 당 1byte)
-                    break;
+            case DIR_BYTE: {
+                if (tok->operand[0] != NULL) {
+                    switch (tok->operand[0][0]) {
+                    case 'C':
+                        locctr += strlen(tok->operand[0]) - 3; // C, 따옴표 2개 총 3개 제외
+                        break;
+                    case 'X':
+                        locctr += (strlen(tok->operand[0]) - 3 + 1) / 2; // X, 따옴표 2개 총 3개 제외 (두 문자 당 1byte)
+                        break;
+                    }
                 }
+                break;
             }
-            else {
+            case DIR_EXTDEF: {
+
+                break;
+            }
+            case DIR_EXTREF: {
+
+                break;
+            }
+            case DIR_EQU: {
+
+                break;
+            }
+            default:
                 // error: Unknown Directive
                 return -4;
             }
@@ -614,6 +686,22 @@ int make_symbol_table_output(const char *symbol_table_dir,
                              const symbol *symbol_table[],
                              int symbol_table_length) {
     /* add your code */
+    FILE* fp;
+    if (symbol_table_dir == NULL) {
+        fp = stdout;
+    }
+    else if ((fp = fopen(symbol_table_dir, "wb")) == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < symbol_table_length; i++) {
+        symbol* sb = symbol_table[i];
+        fprintf(fp, "%s\t%X", sb->name, sb->addr);
+        if (sb->rflag != 0) fprintf(fp, "\t%d %s", sb->rflag, sb->csect_name);
+        fprintf(fp, "\n");
+    }
+
+    if (fp != stdout) fclose(fp);
 
     return 0;
 }

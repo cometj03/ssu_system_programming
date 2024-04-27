@@ -127,9 +127,6 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="FileName.c">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-    </ClCompile>
     <ClCompile Include="my_assembler_20222904.c">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
@@ -139,9 +136,9 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="input.txt" />
-    <Text Include="inst_table-1.txt" />
     <Text Include="inst_table.txt" />
     <Text Include="output_20222904.txt" />
+    <Text Include="output_symtab.txt" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="my_assembler_20222904.h" />

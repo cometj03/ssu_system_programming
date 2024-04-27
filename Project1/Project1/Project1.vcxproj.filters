@@ -15,14 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FileName.c">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
     <ClCompile Include="my_assembler_20222904.c">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="my_assembler_parsing.c">
-      <Filter>소스 파일</Filter>
+      <Filter>헤더 파일</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -35,7 +32,7 @@
     <Text Include="output_20222904.txt">
       <Filter>리소스 파일</Filter>
     </Text>
-    <Text Include="inst_table-1.txt">
+    <Text Include="output_symtab.txt">
       <Filter>리소스 파일</Filter>
     </Text>
   </ItemGroup>
