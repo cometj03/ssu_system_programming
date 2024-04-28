@@ -137,7 +137,6 @@
   <ItemGroup>
     <Text Include="input.txt" />
     <Text Include="inst_table.txt" />
-    <Text Include="output_20222904.txt" />
     <Text Include="output_littab.txt" />
     <Text Include="output_symtab.txt" />
   </ItemGroup>

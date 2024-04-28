@@ -29,9 +29,6 @@
     <Text Include="inst_table.txt">
       <Filter>리소스 파일</Filter>
     </Text>
-    <Text Include="output_20222904.txt">
-      <Filter>리소스 파일</Filter>
-    </Text>
     <Text Include="output_symtab.txt">
       <Filter>리소스 파일</Filter>
     </Text>

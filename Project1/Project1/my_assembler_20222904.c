@@ -11,6 +11,7 @@
  * 기입한다.
  */
 #define _CRT_SECURE_NO_WARNINGS
+//#define DEBUG
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -130,7 +131,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if ((err = make_objectcode_output("output_objectcode.txt",
+    if ((err = make_objectcode_output(NULL, // "output_objectcode.txt",
                                       (const object_code *)obj_code)) < 0) {
         fprintf(stderr,
                 "make_objectcode_output: 오브젝트코드 파일 출력 과정에서 "
@@ -290,6 +291,34 @@ static int insert_literal_into_littbl(const char* literal_str, literal* literal_
     if ((lit = (literal*)malloc(sizeof(literal))) == NULL) return -2;
     lit->addr = 0;
     strcpy(lit->literal, literal_str);
+
+    int lit_len = strlen(lit->literal);
+    switch (lit->literal[1]) {
+    case 'C':
+        if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
+            return -10; // wrong literal format
+        lit->bytes = lit_len - 4;
+        lit->type = 'C';
+        if ((lit->val_chars = (char*)malloc(lit->bytes + 1)) == NULL) return -2;
+        memcpy(lit->val_chars, lit->literal + 3, lit->bytes);
+        lit->val_chars[lit->bytes] = '\0';
+        break;
+    case 'X':
+        if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
+            return -10; // wrong literal format
+        lit->bytes = (lit_len - 4 + 1) / 2;
+        lit->type = 'X';
+        char hex[10] = { 0 };
+        memcpy(hex, lit->literal + 3, lit_len - 4);
+        lit->val_hex = (int)strtol(hex, NULL, 16);
+        break;
+    default:
+        lit->bytes = 3; // WORD
+        lit->type = 'N';
+        lit->val_num = atoi(lit->literal + 1);
+        break;
+    }
+
     literal_table[*literal_table_length] = lit;
     ++(*literal_table_length);
     return 0;
@@ -300,10 +329,10 @@ static int insert_literal_into_littbl(const char* literal_str, literal* literal_
  * @param locctr 현재 위치의 location counter
  * 
  * @details
- * location counter를 리터럴 바이트 수에 따라 적절히 증가시키면서 리터럴 테이블의 리터럴의 주소를 할당해줍니다.
+ * location counter를 리터럴 바이트 수에 따라 적절히 증가시키면서 리터럴 테이블의 리터럴의 주소를 지정해줍니다.
  * 
  * 그리고 토큰으로도 변환하여 토큰 테이블에 넣어줍니다.
- * 변환된 토큰은 label이 "*"이며, operator가 리터럴입니다.
+ * 변환된 토큰은 label이 "*"이며, operator가 리터럴의 값입니다.
  */
 static int set_literal_addr(int* lit_last_idx, int* locctr,
                             token* tokens[], int* tokens_length,
@@ -314,23 +343,7 @@ static int set_literal_addr(int* lit_last_idx, int* locctr,
     while (*lit_last_idx < *literal_table_length) {
         literal* lit = literal_table[*lit_last_idx];
         lit->addr = *locctr;
-
-        int lit_len = strlen(lit->literal);
-        switch (lit->literal[1]) {
-        case 'C':
-            if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
-                return -10; // wrong literal format
-            *locctr += lit_len - 4;
-            break;
-        case 'X':
-            if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
-                return -10; // wrong literal format
-            *locctr += (lit_len - 4 + 1) / 2;
-            break;
-        default:
-            *locctr += 3; // WORD
-            break;
-        }
+        *locctr += lit->bytes;
         ++(*lit_last_idx);
 
         // 토큰으로 변환하여 토큰 테이블에도 대입
@@ -740,7 +753,8 @@ int assem_pass2(const token *tokens[], int tokens_length,
                 const symbol *symbol_table[], int symbol_table_length,
                 const literal *literal_table[], int literal_table_length,
                 object_code *obj_code) {
-    /* add your code */
+    obj_code->csect_cnt = 0;
+    
 
     return 0;
 }
@@ -830,7 +844,53 @@ int make_literal_table_output(const char *literal_table_dir,
  */
 int make_objectcode_output(const char *objectcode_dir,
                            const object_code *obj_code) {
-    /* add your code */
+    FILE* fp;
+    if (objectcode_dir == NULL) {
+        fp = stdout;
+    }
+    else if ((fp = fopen(objectcode_dir, "wb")) == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < obj_code->csect_cnt; i++) {
+        control_section* cs = obj_code->csects[i];
+        header_record* h = cs->header;
+        fprintf(fp, "H%-6s%06X%06X\n", h->program_name, h->start_addr, h->program_length);
+
+        for (int j = 0; j < cs->define_lines; j++) {
+            define_record* d = cs->define[j];
+            fprintf(fp, "D");
+            for (int j = 0; j < d->symbol_cnt; j++)
+                fprintf(fp, "%-6s%06X", d->symbol[j], d->addr[j]);
+            fprintf(fp, "\n");
+        }
+
+        for (int j = 0; j < cs->reference_lines; j++) {
+            reference_record* r = cs->reference[j];
+            fprintf(fp, "R");
+            for (int j = 0; j < r->symbol_cnt; j++)
+                fprintf(fp, "%-6s", r->symbol[j]);
+            fprintf(fp, "\n");
+        }
+
+        for (int j = 0; j < cs->text_lines; j++) {
+            text_record* t = cs->text[j];
+            fprintf(fp, "T%06X%02X%s\n", t->start_addr, t->length, t->obj);
+        }
+
+        for (int j = 0; j < cs->modify_lines; j++) {
+            modify_record* m = cs->modification[j];
+            fprintf(fp, "M%06X%02X%c%s\n", m->start_addr, m->length, m->m_flag, m->symbol);
+        }
+
+        end_record* e = cs->end;
+        fprintf(fp, "E");
+        if (e->program_start_addr != -1)
+            fprintf(fp, "%06X", e->program_start_addr);
+        fprintf(fp, "\n");
+    }
+
+    if (fp != stdout) fclose(fp);
 
     return 0;
 }

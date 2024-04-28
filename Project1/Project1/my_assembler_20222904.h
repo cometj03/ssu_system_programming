@@ -75,9 +75,14 @@ typedef struct _symbol {
  * 주소를 저장하는 필드임을 유의하라.
  */
 typedef struct _literal {
-    char literal[20]; /** 리터럴의 표현식 */
-    int addr;         /** 리터럴의 주소 */
+    char literal[20];   /** 리터럴의 표현식 */
+    int addr;           /** 리터럴의 주소 */
     /* add fields if needed */
+    int bytes;          // 리터럴의 바이트 수
+    char type;          // 리터럴의 타입: ('N', 'C', 'X)
+    int val_num;        // 숫자 값
+    char* val_chars;    // 문자열
+    int val_hex;        // 16진수 값
 } literal;
 
 /**
@@ -90,9 +95,60 @@ typedef struct _literal {
  * 정의해야 한다.
  */
 typedef struct _object_code {
-    /* add fields */
-    int a;
+    int csect_cnt;
+    struct control_section* csects[10];
 } object_code;
+
+typedef struct _control_section {
+    struct header_record* header;
+    struct end_record* end;
+
+    int text_lines;
+    struct text_record* text[10];
+
+    int modify_lines;
+    struct modify_record* modification[10];
+
+    int define_lines;
+    struct define_record* define[10];
+
+    int reference_lines;
+    struct reference_record* reference[10];
+} control_section;
+
+typedef struct _header_record {
+    char program_name[7];
+    int start_addr;
+    int program_length;
+} header_record;
+
+typedef struct _text_record {
+    int start_addr;
+    int length;     // byte 수
+    char obj[61];
+} text_record;
+
+typedef struct _end_record {
+    int program_start_addr;
+} end_record;
+
+typedef struct _modify_record {
+    int start_addr;     // start location of address field to be modified, relative.
+    int length;         // length of address field to be modified.
+    char m_flag;        // modification flag: '+' or '-'
+    char symbol[7];     // external symbol
+} modify_record;
+
+typedef struct _define_record {
+    int symbol_cnt;
+    char symbol[10][7];
+    int addr[10];       // symbol과 한 쌍으로 존재
+} define_record;
+
+typedef struct _reference_record {
+    int symbol_cnt;
+    char symbol[12][7];
+} reference_record;
 
 int init_inst_table(inst *inst_table[], int *inst_table_length,
                     const char *inst_table_dir);
