@@ -73,19 +73,16 @@ int main(int argc, char **argv) {
     }
 
     if ((err = init_input(input, &input_length, "input.txt")) < 0) {
-        fprintf(stderr,
-                "init_input: 소스코드 입력에 실패했습니다. (error_code: %d)\n",
-                err);
+        fprintf(stderr, "init_input: 소스코드 입력에 실패했습니다. (error_code: %d)\n", err);
         return -1;
     }
 
     if ((err = assem_pass1((const inst **)inst_table, inst_table_length,
-                           (const char **)input, input_length, tokens,
-                           &tokens_length, symbol_table, &symbol_table_length,
+                           (const char **)input, input_length, 
+                           tokens, &tokens_length, 
+                           symbol_table, &symbol_table_length,
                            literal_table, &literal_table_length)) < 0) {
-        fprintf(stderr,
-                "assem_pass1: 패스1 과정에서 실패했습니다. (error_code: %d)\n",
-                err);
+        fprintf(stderr, "assem_pass1: 패스1 과정에서 실패했습니다. (error_code: %d)\n", err);
         return -1;
     }
 
@@ -102,7 +99,7 @@ int main(int argc, char **argv) {
     }
     */
 
-    if ((err = make_symbol_table_output(NULL, // "output_symtab.txt",
+    if ((err = make_symbol_table_output("output_symtab.txt",
                                         (const symbol **)symbol_table,
                                         symbol_table_length)) < 0) {
         fprintf(stderr,
@@ -112,7 +109,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if ((err = make_literal_table_output(NULL, // "output_littab.txt",
+    if ((err = make_literal_table_output("output_littab.txt",
                                          (const literal **)literal_table,
                                          literal_table_length)) < 0) {
         fprintf(stderr,
@@ -303,9 +300,13 @@ static int insert_literal_into_littbl(const char* literal_str, literal* literal_
  * @param locctr 현재 위치의 location counter
  * 
  * @details
- * location counter를 적절히 증가시키면서 리터럴 테이블의 리터럴의 주소를 할당해줍니다.
+ * location counter를 리터럴 바이트 수에 따라 적절히 증가시키면서 리터럴 테이블의 리터럴의 주소를 할당해줍니다.
+ * 
+ * 그리고 토큰으로도 변환하여 토큰 테이블에 넣어줍니다.
+ * 변환된 토큰은 label이 "*"이며, operator가 리터럴입니다.
  */
-static int set_literal_addr(int* lit_last_idx, int* locctr, 
+static int set_literal_addr(int* lit_last_idx, int* locctr,
+                            token* tokens[], int* tokens_length,
                             literal* literal_table[], const int* literal_table_length) {
     // lit_last_idx == literal_table_length이면 모든 리터럴의 주소가 지정되었다는 의미
     if (*lit_last_idx == *literal_table_length) return 0;
@@ -331,10 +332,31 @@ static int set_literal_addr(int* lit_last_idx, int* locctr,
             break;
         }
         ++(*lit_last_idx);
+
+        // 토큰으로 변환하여 토큰 테이블에도 대입
+        token* lit_tok;
+        if ((lit_tok = (token*)malloc(sizeof(token))) == NULL) return -2;
+        lit_tok->comment = NULL;
+        lit_tok->nixbpe = 0;
+        for (int i = 0; i < MAX_OPERAND_PER_INST; i++)
+            lit_tok->operand[i] = NULL;
+
+        if ((lit_tok->label = (char*)malloc(2)) == NULL) return -2;
+        if ((lit_tok->operator = (char*)malloc(strlen(lit->literal) + 1)) == NULL) return -2;
+        lit_tok->addr = lit->addr;
+        lit_tok->label[0] = '*';
+        lit_tok->label[1] = '\0';
+        strcpy(lit_tok->operator, lit->literal);
+        tokens[*tokens_length] = lit_tok;
+        ++(*tokens_length);
     }
     return 0;
 }
 
+/**
+ * str이 어떤 지시어인지 확인하고 대응되는 정수값을 반환합니다.
+ * 지시어가 아니라면 -1을 반환합니다.
+ */
 static int directive(const char* str) {
     if (strcmp(str, "START") == 0) {
         return DIR_START;
@@ -376,7 +398,8 @@ static int directive(const char* str) {
  * 'BUFEND-BUFFER'와 같은 수식을 계산하여 그 값을 dest에 대입합니다.
  * 수식이 '*'이라면 locctr 값을 대입해줍니다.
  */
-static int calculate_equ(const char* expr, int* dest, int locctr, const symbol* symbol_table[], int symbol_table_length) {
+static int calculate_equ(const char* expr, int* dest, int locctr, 
+                         const symbol* symbol_table[], int symbol_table_length) {
     if (expr == NULL) return -1;
 
     // operand가 * 이면 현재 주소
@@ -460,8 +483,6 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
         if (input[i][0] == '.') continue; // '.'으로 시작하는 라인은 주석으로 판단
         if ((tok = (token*)malloc(sizeof(token))) == NULL) return -2;
 
-        printf("%X\t%s\n", locctr, input[i]);
-
         // Parsing
         if ((err = token_parsing(input[i], tok, inst_table, inst_table_length)) < 0) return err;
         tok->addr = locctr;
@@ -496,15 +517,15 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
         }
 
         /// [명령어 처리]
-        int inst_idx = search_opcode(tok->operator, inst_table, inst_table_length);
-        if (inst_idx == -1) return -4; // unknown operator
+        if (dir == -1) {
+            int inst_idx = search_opcode(tok->operator, inst_table, inst_table_length);
+            if (inst_idx == -1) return -4; // unknown operator
+            inst* ins = inst_table[inst_idx];
 
-        inst* ins = inst_table[inst_idx];
-        if (ins->format == 0) {
-            // 어셈블러 지시어 (format == 0)
-            int dir = directive(tok->operator);
-            if (dir == DIR_END) break;
-
+            locctr += inst_table[inst_idx]->format;
+            if (tok->operator[0] == '+') locctr++;
+        } 
+        else {
             switch (dir) {
             case DIR_START:
                 if (tok->operand[0] != NULL) {
@@ -515,30 +536,22 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 break;
             case DIR_CSECT:
                 // Control Section이 시작하기 전에 앞에서 쌓인 리터럴 넣어줌
-                if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+                --(*tokens_length);
+                if ((err = set_literal_addr(&lit_last_idx, &locctr,
+                    tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
+                tokens[*tokens_length] = tok;
+                ++(*tokens_length);
+                tok->addr = 0;
                 locctr = 0;
                 csect_name = tok->label;
                 if ((err = insert_label_into_symtbl(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
                 break;
             case DIR_LTORG: {
-                int before_lit_idx = lit_last_idx;
-                if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
-
-                // TODO: 이거 함수로 분리해놓기
                 // LTORG 토큰은 삭제하고 리터럴로 채우기
                 --(*tokens_length);
                 free(tokens[*tokens_length]);
-                for (int i = before_lit_idx; i < *literal_table_length; i++) {
-                    literal* lit = literal_table[i];
-                    token* lit_tok;
-                    if ((lit_tok = (token*)malloc(sizeof(token))) == NULL) return -2;
-                    lit_tok->addr = lit->addr;
-                    if ((lit_tok->label = (char*)malloc(2)) == NULL) return -2;
-                    lit_tok->label[0] = '*';
-                    lit_tok->label[1] = '\0';
-                    if ((lit_tok->operator = (char*)malloc(strlen(lit->literal) + 1)) == NULL) return -2;
-                    strcpy(lit_tok->operator, lit->literal);
-                }
+                if ((err = set_literal_addr(&lit_last_idx, &locctr, 
+                    tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
                 break;
             }
             case DIR_RESW:
@@ -566,13 +579,21 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 break;
             }
         }
-        else {
-            locctr += inst_table[inst_idx]->format;
-            if (tok->operator[0] == '+') locctr++;
-        }
     } // end for
 
-    if ((err = set_literal_addr(&lit_last_idx, &locctr, literal_table, literal_table_length)) < 0) return err;
+    if ((err = set_literal_addr(&lit_last_idx, &locctr,
+        tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
+
+#ifdef DEBUG
+    // 토큰 테이블 출력
+    for (int i = 0; i < *tokens_length; i++) {
+        token* tok = tokens[i];
+        printf("%X\t%s\t%s\t", tok->addr, tok->label, tok->operator);
+        for (int j = 0; j < 3 && tok->operand[j] != NULL; j++)
+            printf("%s ", tok->operand[j]);
+        printf("\n");
+    }
+#endif
     return 0;
 }
 
