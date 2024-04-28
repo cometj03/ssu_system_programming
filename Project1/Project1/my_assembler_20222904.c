@@ -224,11 +224,11 @@ int init_input(char *input[], int *input_length, const char *input_dir) {
 /**
  * label이 유효한지 체크하는 함수입니다.
  * - label의 길이는 6보다 작거나 같아야 합니다.
- * - symbol table에 이미 같은 label이 존재하면 안 됩니다.
+ * - 같은 control section에 같은 label이 존재하면 안 됩니다.
  * 
  * @return 오류: < 0, 정상 종료 == 0
  */
-static int check_symbol_valid(const char* label, int line_number,
+static int check_symbol_valid(const char* label, const char* csect_name, int line_number,
                               symbol* symbol_table[], int* symbol_table_length) {
     if (label == NULL) return -1;
 
@@ -240,7 +240,8 @@ static int check_symbol_valid(const char* label, int line_number,
     // symbol table에 존재하는지 확인
     // 존재한다면 에러
     for (int s = 0; s < *symbol_table_length; s++) {
-        if (strcmp(symbol_table[s]->name, label) == 0) {
+        if (strcmp(symbol_table[s]->name, label) == 0 && 
+            strcmp(symbol_table[s]->csect_name, csect_name) == 0) {
             fprintf(stderr, "line #%d : symbol '%s' is duplicated\n", line_number, label);
             return -3; // duplicated symbol
         }
@@ -507,7 +508,7 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
 
         /// [symbol 처리]
         if (tok->label != NULL) {
-            if ((err = check_symbol_valid(tok->label, i, symbol_table, symbol_table_length)) < 0) return err;
+            if ((err = check_symbol_valid(tok->label, csect_name, i + 1, symbol_table, symbol_table_length)) < 0) return err;
 
             if (dir == DIR_EQU && tok->operand[0] != NULL) {
                 int addr;

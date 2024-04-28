@@ -18,9 +18,6 @@
     <ClCompile Include="my_assembler_20222904.c">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="my_assembler_parsing.c">
-      <Filter>헤더 파일</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Text Include="input.txt">
