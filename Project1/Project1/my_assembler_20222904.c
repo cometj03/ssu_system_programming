@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if ((err = make_objectcode_output(NULL, // "output_objectcode.txt",
+    if ((err = make_objectcode_output("output_objectcode.txt",
                                       (const object_code *)obj_code)) < 0) {
         fprintf(stderr,
                 "make_objectcode_output: 오브젝트코드 파일 출력 과정에서 "
@@ -372,6 +372,7 @@ static int set_literal_addr(int* lit_last_idx, int* locctr,
  * 지시어가 아니라면 -1을 반환합니다.
  */
 static int directive(const char* str) {
+    if (str == NULL) return -1;
     if (strcmp(str, "START") == 0) {
         return DIR_START;
     }
@@ -453,6 +454,19 @@ static int calculate_equ(const char* expr, int* dest, int locctr,
     return 0;
 }
 
+static int insert_dummy_token(token* tokens[], int* tokens_length, int addr) {
+    token* tok;
+    if ((tok = (token*)malloc(sizeof(token))) == NULL) return -1;
+    tok->addr = addr;
+    tok->comment = NULL;
+    tok->operand[0] = NULL;
+    tok->operator = NULL;
+    tok->label = NULL;
+    tokens[*tokens_length] = tok;
+    ++(*tokens_length);
+    return 0;
+}
+
 /**
  * @brief 어셈블리 코드을 위한 패스 1 과정을 수행한다.
  *
@@ -479,7 +493,6 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 token *tokens[], int *tokens_length, 
                 symbol *symbol_table[], int *symbol_table_length, 
                 literal *literal_table[], int *literal_table_length) {
-    FILE* fp = stdout;
     int locctr = 0; // location counter
     int err;
     char* csect_name = NULL; // current control section name
@@ -553,6 +566,9 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 --(*tokens_length);
                 if ((err = set_literal_addr(&lit_last_idx, &locctr,
                     tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
+                // 길이 계산 편의를 위해 넣어줍니다.
+                if (insert_dummy_token(tokens, tokens_length, locctr) < 0) return -1;
+
                 tokens[*tokens_length] = tok;
                 ++(*tokens_length);
                 tok->addr = 0;
@@ -560,14 +576,13 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 csect_name = tok->label;
                 if ((err = insert_label_into_symtbl(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
                 break;
-            case DIR_LTORG: {
+            case DIR_LTORG:
                 // LTORG 토큰은 삭제하고 리터럴로 채우기
                 --(*tokens_length);
                 free(tokens[*tokens_length]);
                 if ((err = set_literal_addr(&lit_last_idx, &locctr, 
                     tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
                 break;
-            }
             case DIR_RESW:
                 if (tok->operand[0] != NULL)
                     locctr += atoi(tok->operand[0]) * 3;
@@ -597,6 +612,8 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
 
     if ((err = set_literal_addr(&lit_last_idx, &locctr,
         tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
+    // 길이 계산 편의를 위해 넣어줍니다.
+    if (insert_dummy_token(tokens, tokens_length, locctr) < 0) return -1;
 
 #ifdef DEBUG
     // 토큰 테이블 출력
@@ -732,6 +749,33 @@ int make_opcode_output(const char *output_dir, const token *tokens[],
 }
 
 /**
+ * control section 객체를 초기화해주는 함수입니다.
+ */
+static int init_control_section(control_section* cs, int start_addr, const char* csect_name) {
+    header_record* h;
+    end_record* e;
+
+    if (cs == NULL) return -1;
+    if ((h = (header_record*)malloc(sizeof(header_record))) == NULL) return -2;
+    if ((e = (end_record*)malloc(sizeof(end_record))) == NULL) return -2;
+    if (strlen(csect_name) > 6) return -3;
+
+    strcpy(h->program_name, csect_name);
+    h->start_addr = start_addr;
+    h->program_length = 0;
+
+    e->program_start_addr = start_addr;
+
+    cs->header = h;
+    cs->end = e;
+    cs->text_lines = 0;
+    cs->modification_lines = 0;
+    cs->define_lines = 0;
+    cs->reference_lines = 0;
+    return 0;
+}
+
+/**
  * @brief 어셈블리 코드을 위한 패스 2 과정을 수행한다.
  *
  * @param tokens 토큰 테이블 주소
@@ -755,6 +799,91 @@ int assem_pass2(const token *tokens[], int tokens_length,
                 const literal *literal_table[], int literal_table_length,
                 object_code *obj_code) {
     obj_code->csect_cnt = 0;
+
+    control_section* cs = NULL;
+    define_record* def = NULL;
+    reference_record* ref = NULL;
+
+    for (int i = 0; i < tokens_length; i++) {
+        token* tok = tokens[i];
+        printf("%X\t%s\t%s\n", tok->addr, tok->label, tok->operator);
+        int dir = directive(tok->operator);
+
+        // Define 레코드 수정
+        if (def != NULL && tok->label != NULL) {
+            for (int k = 0; k < def->symbol_cnt; k++)
+                if (strcmp(def->symbol[k], tok->label) == 0)
+                    def->addr[k] = tok->addr;
+        }
+
+        if (dir == -1) {
+            // 리터럴인 경우
+            /*if (tok->label != NULL && tok->label[0] == '*') {
+
+            }
+            else {
+
+            }*/
+
+            // 피연산자가 Reference 레코드에 있다면 Modification 레코드 추가
+            if (ref != NULL) {
+                for (int j = 0; j < MAX_OPERAND_PER_INST && tok->operand[j] != NULL; j++) {
+                }
+            }
+        }
+        else {
+            switch (dir) {
+            case DIR_START:
+            case DIR_CSECT:
+                if (cs != NULL && i > 0) {
+                    header_record* h = cs->header;
+                    h->program_length = tokens[i - 1]->addr; // 새로운 control section이 시작되기 전 이전 토큰의 주소가 해당 csect의 길이가 된다
+                }
+                if ((cs = (control_section*)malloc(sizeof(control_section))) == NULL)
+                    return -2;
+                int start_addr = 0;
+                if (tok->operand[0] != NULL)
+                    start_addr = atoi(tok->operand[0]);
+                if (init_control_section(cs, start_addr, tok->label) < 0) return -2;
+                
+                obj_code->csects[obj_code->csect_cnt] = cs;
+                ++obj_code->csect_cnt;
+                break;
+            case DIR_EXTREF: {
+                if ((ref = (reference_record*)malloc(sizeof(reference_record))) == NULL) return -2;
+                ref->symbol_cnt = 0;
+                for (int j = 0; j < MAX_OPERAND_PER_INST && tok->operand[j] != NULL; j++) {
+                    strcpy(ref->symbol[j], tok->operand[j]);
+                    ++ref->symbol_cnt;
+                }
+                if (cs != NULL) {
+                    cs->ref[cs->reference_lines] = ref;
+                    ++cs->reference_lines;
+                }
+                break;
+            }
+            case DIR_EXTDEF:
+                if ((def = (define_record*)malloc(sizeof(define_record))) == NULL) return -2;
+                def->symbol_cnt = 0;
+                for (int j = 0; j < MAX_OPERAND_PER_INST && tok->operand[j] != NULL; j++) {
+                    strcpy(def->symbol[j], tok->operand[j]);
+                    def->addr[j] = 0; // 0으로 초기화
+                    ++def->symbol_cnt;
+                }
+                if (cs != NULL) {
+                    cs->define[cs->define_lines] = def;
+                    ++cs->define_lines;
+                }
+                break;
+            case DIR_END:
+                if (cs != NULL) {
+                    header_record* h = cs->header;
+                    h->program_length = tokens[tokens_length - 1]->addr; // 프로그램이 완전히 끝나기 전 전 이전 토큰의 주소가 해당 csect의 길이가 된다
+                }
+                break;
+            }
+        }
+    }
     
 
     return 0;
@@ -867,7 +996,7 @@ int make_objectcode_output(const char *objectcode_dir,
         }
 
         for (int j = 0; j < cs->reference_lines; j++) {
-            reference_record* r = cs->reference[j];
+            reference_record* r = cs->ref[j];
             fprintf(fp, "R");
             for (int j = 0; j < r->symbol_cnt; j++)
                 fprintf(fp, "%-6s", r->symbol[j]);
@@ -876,11 +1005,11 @@ int make_objectcode_output(const char *objectcode_dir,
 
         for (int j = 0; j < cs->text_lines; j++) {
             text_record* t = cs->text[j];
-            fprintf(fp, "T%06X%02X%s\n", t->start_addr, t->length, t->obj);
+            fprintf(fp, "T%06X%02X%s\n", t->start_addr, t->bytes_length, t->obj);
         }
 
-        for (int j = 0; j < cs->modify_lines; j++) {
-            modify_record* m = cs->modification[j];
+        for (int j = 0; j < cs->modification_lines; j++) {
+            modification_record* m = cs->modi[j];
             fprintf(fp, "M%06X%02X%c%s\n", m->start_addr, m->length, m->m_flag, m->symbol);
         }
 

@@ -106,14 +106,14 @@ typedef struct _control_section {
     int text_lines;
     struct text_record* text[10];
 
-    int modify_lines;
-    struct modify_record* modification[10];
+    int modification_lines;
+    struct modification_record* modi[10];
 
     int define_lines;
     struct define_record* define[10];
 
     int reference_lines;
-    struct reference_record* reference[10];
+    struct reference_record* ref[10];
 } control_section;
 
 typedef struct _header_record {
@@ -124,7 +124,7 @@ typedef struct _header_record {
 
 typedef struct _text_record {
     int start_addr;
-    int length;     // byte 수
+    int bytes_length;     // byte 수
     char obj[61];
 } text_record;
 
@@ -132,12 +132,12 @@ typedef struct _end_record {
     int program_start_addr;
 } end_record;
 
-typedef struct _modify_record {
+typedef struct _modification_record {
     int start_addr;     // start location of address field to be modified, relative.
     int length;         // length of address field to be modified.
     char m_flag;        // modification flag: '+' or '-'
     char symbol[7];     // external symbol
-} modify_record;
+} modification_record;
 
 typedef struct _define_record {
     int symbol_cnt;
