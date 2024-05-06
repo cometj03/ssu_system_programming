@@ -1,7 +1,6 @@
+import java.io.*;
 import java.util.HashMap;
 import java.util.Optional;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 
 public class InstructionTable {
 	/**
@@ -14,7 +13,15 @@ public class InstructionTable {
 	public InstructionTable(String instFileName) throws FileNotFoundException, IOException {
 		instructionMap = new HashMap<String, InstructionInfo>();
 
-		// TODO: fileName의 파일을 열고, 해당 내용을 파싱하여 instructionMap에 저장하기.
+		File file = new File(instFileName);
+		BufferedReader bufReader = new BufferedReader(new FileReader(file));
+
+		String line;
+		while ((line = bufReader.readLine()) != null) {
+			InstructionInfo inst = new InstructionInfo(line);
+			instructionMap.put(inst.getName(), inst);
+		}
+		bufReader.close();
 	}
 
 	/**
@@ -24,7 +31,8 @@ public class InstructionTable {
 	 * @return 기계어 정보. 없을 경우 empty
 	 */
 	public Optional<InstructionInfo> search(String instructionName) {
-		// TODO: instructionMap에서 instructionName에 해당하는 명령어의 정보 반환하기.
+		InstructionInfo inst = instructionMap.get(instructionName);
+		if (inst != null) return Optional.of(inst);
 		return Optional.empty();
 	}
 

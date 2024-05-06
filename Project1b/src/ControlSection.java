@@ -16,6 +16,7 @@ public class ControlSection {
 		_literalTable = new LiteralTable();
 
 		// TODO: pass1 수행하기.
+
 	}
 
 	/**

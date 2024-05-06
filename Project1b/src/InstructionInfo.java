@@ -6,7 +6,13 @@ public class InstructionInfo {
 	 * @throws RuntimeException 잘못된 파일 형식
 	 */
 	public InstructionInfo(String line) throws RuntimeException {
-		// TODO: line을 파싱하여 _name, _opcode, _numberOfOperand, _format 초기화하기.
+		// _name, _opcode, _numberOfOperand, _format
+		String[] list = line.split(" ");
+		assert list.length == 4;
+		_name = list[0];
+		_opcode = Integer.parseInt(list[1], 16);
+		_numberOfOperand = Integer.parseInt(list[2]);
+		_format = Integer.parseInt(list[3]);
 	}
 
 	/**
