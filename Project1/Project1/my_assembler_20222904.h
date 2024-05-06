@@ -96,24 +96,24 @@ typedef struct _literal {
  */
 typedef struct _object_code {
     int csect_cnt;
-    struct control_section* csects[10];
+    struct _control_section* csects[10];
 } object_code;
 
 typedef struct _control_section {
-    struct header_record* header;
-    struct end_record* end;
+    struct _header_record* header;
+    struct _end_record* end;
 
     int text_lines;
-    struct text_record* text[10];
+    struct _text_record* text[10];
 
     int modification_lines;
-    struct modification_record* modi[10];
+    struct _modification_record* modi[10];
 
     int define_lines;
-    struct define_record* define[10];
+    struct _define_record* define[10];
 
     int reference_lines;
-    struct reference_record* ref[10];
+    struct _reference_record* ref[10];
 } control_section;
 
 typedef struct _header_record {

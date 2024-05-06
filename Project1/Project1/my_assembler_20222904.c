@@ -685,7 +685,7 @@ int token_parsing(const char *input, token *tok,
 
     // [nixbpe]
     int inst_idx = search_opcode(opr, inst_table, inst_table_length);
-    if (inst_idx >= 0 && inst_table[inst_idx]->format != 0 && tok->operand[0] != NULL) {
+    if (inst_idx >= 0 && tok->operand[0] != NULL) {
         char c = tok->operand[0][0];
         if (c == '@') tok->nixbpe += (1 << 5);      // 10 0000
         else if (c == '#') tok->nixbpe += (1 << 4); // 01 0000
@@ -714,6 +714,7 @@ int token_parsing(const char *input, token *tok,
  */
 int search_opcode(const char *str, const inst *inst_table[],
                   int inst_table_length) {
+    if (str == NULL) return -1;
     if (str[0] == '+') return search_opcode(str + 1, inst_table, inst_table_length);
 
     for (int i = 0; i < inst_table_length; i++) {
@@ -776,6 +777,30 @@ static int init_control_section(control_section* cs, int start_addr, const char*
 }
 
 /**
+ * 
+ */
+static int generate_instruction(char* dest, unsigned char op, char nixbpe, int pc, int operand_addr) {
+    if (dest == NULL) return -1;
+
+    unsigned int intr = 0; // 4byte
+    intr += (op << 16);
+    intr += (nixbpe << 12);
+    if (nixbpe & 1) intr <<= 8; // extended이면 8 shift
+    intr |= operand_addr - pc; // todo: 음수일 때..
+
+    char buf[10];
+    if (nixbpe & 1) {
+        sprintf(buf, "%08X", intr);
+        memcpy(dest, buf, 8);
+    }
+    else {
+        sprintf(buf, "%06X", intr);
+        memcpy(dest, buf, 6);
+    }
+    return 0;
+}
+
+/**
  * @brief 어셈블리 코드을 위한 패스 2 과정을 수행한다.
  *
  * @param tokens 토큰 테이블 주소
@@ -809,7 +834,8 @@ int assem_pass2(const token *tokens[], int tokens_length,
         printf("%X\t%s\t%s\n", tok->addr, tok->label, tok->operator);
         int dir = directive(tok->operator);
 
-        // Define 레코드 수정
+        // define 레코드 수정
+        // define 레코드에 들어있는 symbol이라면 대응되는 주소값을 넣어준다
         if (def != NULL && tok->label != NULL) {
             for (int k = 0; k < def->symbol_cnt; k++)
                 if (strcmp(def->symbol[k], tok->label) == 0)
@@ -818,12 +844,38 @@ int assem_pass2(const token *tokens[], int tokens_length,
 
         if (dir == -1) {
             // 리터럴인 경우
-            /*if (tok->label != NULL && tok->label[0] == '*') {
+            if (tok->label != NULL && tok->label[0] == '*') {
 
             }
+            else if (tok->operator == NULL) {
+                continue;
+            }
             else {
+                int inst_idx;
+                if ((inst_idx = search_opcode(tok->operator, inst_table, inst_table_length)) < 0) return -3;
+                inst* ins = inst_table[inst_idx];
+                char* inst_str;
+                int bytes = (tok->nixbpe & 1) ? 4 : ins->format; // 해당 명령어가 차지하는 byte
 
-            }*/
+                if ((inst_str = (char*)malloc(bytes * 2)) == NULL) return -2;
+
+                int operand_addr = 0;
+                if (tok->operand[0] != NULL) {
+                    for (int k = 0; k < symbol_table_length; k++) {
+                        symbol* sym = symbol_table[k];
+                        if (strcmp(sym->name, tok->operand[0]) == 0 &&
+                            (cs == NULL || strcmp(sym->csect_name, cs->header->program_name) == 0))
+                            operand_addr = sym->addr;
+                    }
+                }
+                if (generate_instruction(inst_str, ins->op, tok->nixbpe, tok->addr + bytes, operand_addr) < 0)
+                    return -3;
+                if (tok->nixbpe & 1)
+                    inst_str[8] = '\0';
+                else
+                    inst_str[6] = '\0';
+                printf("instruction: %s\n", inst_str);
+            }
 
             // 피연산자가 Reference 레코드에 있다면 Modification 레코드 추가
             if (ref != NULL) {
@@ -849,7 +901,7 @@ int assem_pass2(const token *tokens[], int tokens_length,
                 obj_code->csects[obj_code->csect_cnt] = cs;
                 ++obj_code->csect_cnt;
                 break;
-            case DIR_EXTREF: {
+            case DIR_EXTREF:
                 if ((ref = (reference_record*)malloc(sizeof(reference_record))) == NULL) return -2;
                 ref->symbol_cnt = 0;
                 for (int j = 0; j < MAX_OPERAND_PER_INST && tok->operand[j] != NULL; j++) {
@@ -861,7 +913,6 @@ int assem_pass2(const token *tokens[], int tokens_length,
                     ++cs->reference_lines;
                 }
                 break;
-            }
             case DIR_EXTDEF:
                 if ((def = (define_record*)malloc(sizeof(define_record))) == NULL) return -2;
                 def->symbol_cnt = 0;
