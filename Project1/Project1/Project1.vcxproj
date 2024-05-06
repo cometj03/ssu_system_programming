@@ -135,6 +135,7 @@
     <Text Include="input.txt" />
     <Text Include="inst_table.txt" />
     <Text Include="output_littab.txt" />
+    <Text Include="output_objectcode.txt" />
     <Text Include="output_symtab.txt" />
   </ItemGroup>
   <ItemGroup>
