@@ -1,4 +1,5 @@
 import java.util.ArrayList;
+import java.util.Optional;
 
 public class ControlSection {
 	/**
@@ -16,7 +17,54 @@ public class ControlSection {
 		_literalTable = new LiteralTable();
 
 		// TODO: pass1 수행하기.
+		int locctr = 0;
+		for (String line : input) {
+			Token tok = new Token(line);
+			_tokens.add(tok);
 
+			Optional<InstructionInfo> instInfo = instTable.search(tok.getOperator());
+			if (instInfo.isEmpty()) {
+				switch (tok.getOperator()) {
+					case "START":
+						locctr = Integer.parseInt(tok.getOperands().get(0));
+						break;
+					case "CSECT":
+						locctr = 0;
+						break;
+					case "EQU":
+						break;
+					case "LTORG":
+						break;
+					default:
+						locctr += handleResDirectives(tok.getOperator(), tok.getOperands().get(0));
+						break;
+				}
+			} else {
+				InstructionInfo inst = instInfo.get();
+				locctr += inst.getFormat() + (tok.isE() ? 1 : 0);
+			}
+
+
+		}
+	}
+
+	int handleResDirectives(String directive, String data) {
+		switch (directive) {
+			case "RESW":
+				return Integer.parseInt(data) * 3;
+			case "RESB":
+				return Integer.parseInt(data);
+			case "WORD":
+				return 3;
+			case "BYTE":
+				if (data.startsWith("C")) {
+					return data.length() - 3; // C, 따옴표 두 개 제외
+				} else if (data.startsWith("X")) {
+					return (data.length() - 3 + 1) / 2; // X, 따옴표 2개 제외 (두 문자 당 1byte)
+				}
+				break;
+		}
+		return 0;
 	}
 
 	/**

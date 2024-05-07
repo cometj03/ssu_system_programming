@@ -11,6 +11,36 @@ public class Token {
 	 */
 	public Token(String input) throws RuntimeException {
 		// TODO: Token 클래스의 field 초기화.
+		if (input.startsWith(".")) {
+			_comment = Optional.of(input);
+			return;
+		}
+		String[] tok = input.split("\t");
+		if (tok[0].length() > 0) _label = Optional.of(tok[0]);
+		if (tok[1].length() > 0) {
+			_operator = Optional.of(tok[1]);
+			if (tok[1].startsWith("+")) _nixbpe |= 1;
+		}
+		if (tok[3].length() > 0) _comment = Optional.of(tok[3]);
+
+		for (String opnd : tok[2].split(",")) {
+			if (opnd.equals("X")) {
+				_nixbpe |= (1 << 3);
+				continue;
+			}
+			if (opnd.contains("#")) {
+				_nixbpe |= (1 << 4); // 01 0000
+			} else if (opnd.contains("@")) {
+				_nixbpe |= (1 << 5); // 10 0000
+			} else {
+				_nixbpe |= (3 << 4); // 11 0000
+			}
+			_operands.add(opnd);
+		}
+	}
+
+	public void setPcRelative() {
+		_nixbpe |= (1 << 1);
 	}
 
 	// TODO: 필요한 getter 구현하기.
@@ -21,8 +51,7 @@ public class Token {
 	 * @return N bit가 1인지 여부
 	 */
 	public boolean isN() {
-		// TODO: 구현하기.
-		return false;
+		return (_nixbpe & (1 << 5)) != 0;
 	}
 
 	/**
@@ -31,8 +60,7 @@ public class Token {
 	 * @return I bit가 1인지 여부
 	 */
 	public boolean isI() {
-		// TODO: 구현하기.
-		return false;
+		return (_nixbpe & (1 << 4)) != 0;
 	}
 
 	/**
@@ -41,8 +69,7 @@ public class Token {
 	 * @return X bit가 1인지 여부
 	 */
 	public boolean isX() {
-		// TODO: 구현하기.
-		return false;
+		return (_nixbpe & (1 << 3)) != 0;
 	}
 
 	/*
@@ -58,8 +85,7 @@ public class Token {
 	 * @return P bit가 1인지 여부
 	 */
 	public boolean isP() {
-		// TODO: 구현하기.
-		return false;
+		return (_nixbpe & (1 << 1)) != 0;
 	}
 
 	/**
@@ -68,8 +94,7 @@ public class Token {
 	 * @return E bit가 1인지 여부
 	 */
 	public boolean isE() {
-		// TODO: 구현하기.
-		return false;
+		return (_nixbpe & 1) != 0;
 	}
 
 	/**
@@ -89,17 +114,37 @@ public class Token {
 	}
 
 	/** label */
-	private Optional<String> _label;
+	private Optional<String> _label = Optional.empty();
 
 	/** operator */
-	private Optional<String> _operator;
+	private Optional<String> _operator = Optional.empty();
 
 	/** operand */
-	private ArrayList<String> _operands;
+	private ArrayList<String> _operands = new ArrayList<>();
 
 	/** comment */
-	private Optional<String> _comment;
+	private Optional<String> _comment = Optional.empty();
 
 	/** nixbpe 비트를 저장하는 변수 */
-	private Optional<Integer> _nixbpe;
+	private int _nixbpe = 0;
+
+	public String getLabel() {
+		return _label.orElse("");
+	}
+
+	public String getOperator() {
+		return _operator.orElse("");
+	}
+
+	public ArrayList<String> getOperands() {
+		return _operands;
+	}
+
+	public String getComment() {
+		return _comment.orElse("");
+	}
+
+	public int get_nixbpe() {
+		return _nixbpe;
+	}
 }

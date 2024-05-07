@@ -18,6 +18,12 @@ public class SymbolTable {
 	 */
 	public void putLabel(String label, int address) throws RuntimeException {
 		// TODO: EQU를 제외한 명령어/지시어의 label로 생성되는 심볼을 추가하기.
+		if (label.length() > 6)
+			throw new RuntimeException("label's length must be <= 6");
+		if (symbolMap.containsKey(label))
+			throw new RuntimeException("duplicated symbol");
+
+		
 	}
 
 	/**
