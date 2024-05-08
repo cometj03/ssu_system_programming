@@ -1,0 +1,60 @@
+package instruction;
+
+public class Instruction {
+    /**
+     * 기계어 목록 파일의 한 줄을 읽고, 이를 파싱하여 저장한다.
+     *
+     * @param line 기계어 목록 파일의 한 줄
+     * @throws RuntimeException 잘못된 파일 형식
+     */
+    public Instruction(String line) throws RuntimeException {
+        // _name, _opcode, _numberOfOperand, _format
+        String[] list = line.split(" ");
+        assert list.length == 4;
+        _name = list[0];
+        _opcode = Integer.parseInt(list[1], 16);
+        _numberOfOperand = Integer.parseInt(list[2]);
+        _format = Integer.parseInt(list[3]);
+    }
+
+    /**
+     * 기계어 명칭을 반환한다.
+     *
+     * @return 기계어 명칭
+     */
+    public String getName() {
+        return _name;
+    }
+
+    /**
+     * 기계어의 opcode를 반환한다.
+     *
+     * @return 기계어의 opcode
+     */
+    public int getOpcode() {
+        return _opcode;
+    }
+
+    /**
+     * 기계어의 operand 개수를 반환한다.
+     *
+     * @return 기계어의 operand 개수
+     */
+    public int getNumberOfOperand() {
+        return _numberOfOperand;
+    }
+
+    /**
+     * 기계어의 형식을 반환한다.
+     *
+     * @return 기계어의 형식. 1: ~~, 2: ~~, 3: ~~, 4:~~, 5:~~ (본인의 사용 방식에 맞춰 작성한다)
+     */
+    public int getFormat() {
+        return _format;
+    }
+
+    private String _name;
+    private int _opcode;
+    private int _numberOfOperand;
+    private int _format;
+}

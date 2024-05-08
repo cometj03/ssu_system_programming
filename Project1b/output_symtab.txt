@@ -1,5 +1,5 @@
-<SymbolTable.toString()>
+<symbol.SymbolTable.toString()>
 
-<SymbolTable.toString()>
+<symbol.SymbolTable.toString()>
 
-<SymbolTable.toString()>
+<symbol.SymbolTable.toString()>

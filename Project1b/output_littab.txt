@@ -1,5 +1,5 @@
-<LiteralTable.toString()>
+<literal.LiteralTable.toString()>
 
-<LiteralTable.toString()>
+<literal.LiteralTable.toString()>
 
-<LiteralTable.toString()>
+<literal.LiteralTable.toString()>
