@@ -1,5 +1,8 @@
-<symbol.SymbolTable.toString()>
+CLOOP	0X03	
+ENDFIL	0X17	
+FIRST	0X00	
 
-<symbol.SymbolTable.toString()>
+RLOOP	0X09	
+EXIT	0X20	
 
-<symbol.SymbolTable.toString()>
+WLOOP	0X06	

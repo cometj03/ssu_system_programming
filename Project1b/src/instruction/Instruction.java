@@ -11,10 +11,10 @@ public class Instruction {
         // _name, _opcode, _numberOfOperand, _format
         String[] list = line.split(" ");
         assert list.length == 4;
-        _name = list[0];
-        _opcode = Integer.parseInt(list[1], 16);
-        _numberOfOperand = Integer.parseInt(list[2]);
-        _format = Integer.parseInt(list[3]);
+        name = list[0];
+        opcode = Integer.parseInt(list[1], 16);
+        numberOfOperand = Integer.parseInt(list[2]);
+        format = Integer.parseInt(list[3]);
     }
 
     /**
@@ -23,7 +23,7 @@ public class Instruction {
      * @return 기계어 명칭
      */
     public String getName() {
-        return _name;
+        return name;
     }
 
     /**
@@ -32,7 +32,7 @@ public class Instruction {
      * @return 기계어의 opcode
      */
     public int getOpcode() {
-        return _opcode;
+        return opcode;
     }
 
     /**
@@ -41,7 +41,7 @@ public class Instruction {
      * @return 기계어의 operand 개수
      */
     public int getNumberOfOperand() {
-        return _numberOfOperand;
+        return numberOfOperand;
     }
 
     /**
@@ -50,11 +50,11 @@ public class Instruction {
      * @return 기계어의 형식. 1: ~~, 2: ~~, 3: ~~, 4:~~, 5:~~ (본인의 사용 방식에 맞춰 작성한다)
      */
     public int getFormat() {
-        return _format;
+        return format;
     }
 
-    private String _name;
-    private int _opcode;
-    private int _numberOfOperand;
-    private int _format;
+    private final String name;
+    private final int opcode;
+    private final int numberOfOperand;
+    private final int format;
 }

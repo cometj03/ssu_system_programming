@@ -2,6 +2,7 @@ import directive.Directive;
 import instruction.Instruction;
 import instruction.InstructionTable;
 import literal.LiteralTable;
+import symbol.Symbol;
 import symbol.SymbolTable;
 import token.DirectiveToken;
 import token.InstructionToken;
@@ -41,17 +42,13 @@ public class ControlSection {
             Token token;
             if (inst.isPresent()) {
                 // 명령어 수행
-                token = handlePass1Instruction(locctr, operator, stringToken.getOperands(), inst.get(), symbolTable, literalTable);
+                token = handlePass1Instruction(locctr, stringToken, inst.get(), symbolTable, literalTable);
             } else {
                 // 지시어 수행
-                token = handlePass1Directive(locctr, operator, symbolTable, literalTable);
+                token = handlePass1Directive(locctr, stringToken, symbolTable, literalTable);
             }
             locctr += token.getSize();
             tokens.add(token);
-
-//            if (stringToken.getLabel().isPresent() && !stringToken.getOperator().orElse("").equals("EQU")) {
-//                symbolTable.putLabel(stringToken.getLabel().get(), locctr);
-//            }
         }
     }
 
@@ -89,24 +86,70 @@ public class ControlSection {
 
     private static InstructionToken handlePass1Instruction(
             int locctr,
-            String operator,
-            List<String> operands,
+            StringToken stringToken,
             Instruction instruction,
             SymbolTable symbolTable,
-            LiteralTable literalTable
-    ) throws RuntimeException {
-        return new InstructionToken("", "", new ArrayList<>(), 0, 0);
+            LiteralTable literalTable) throws RuntimeException {
+        List<String> operands = new ArrayList<>();
+        int size = instruction.getFormat();
+        boolean nBit, iBit, xBit, pBit, eBit;
+        nBit = iBit = xBit = pBit = eBit = false;
+
+        if (stringToken.getOperator().get().startsWith("+")) {
+            ++size;
+            eBit = true;
+        }
+
+        if (stringToken.getLabel().isPresent()) {
+            String label = stringToken.getLabel().get();
+            symbolTable.putLabel(label, locctr);
+        }
+
+        for (String opnd : stringToken.getOperands()) {
+            if (opnd.equals("X")) {
+                xBit = true;
+                continue;
+            }
+            operands.add(opnd);
+            if (opnd.startsWith("=")) {
+                literalTable.putLiteral(opnd);
+                pBit = true;
+                continue;
+            }
+            if (opnd.startsWith("#")) {
+                iBit = true;
+                continue;
+            }
+            if (opnd.startsWith("@")) {
+                nBit = true;
+                continue;
+            }
+
+            Optional<Symbol> sym = symbolTable.searchSymbol(opnd);
+            if (sym.isPresent() && !sym.get().isReference()) {
+                pBit = true;
+                eBit = true;
+            }
+        }
+
+        return new InstructionToken(instruction, operands,
+                nBit, iBit, xBit, pBit, eBit, stringToken.getTokenString(), locctr, size);
     }
 
     private static DirectiveToken handlePass1Directive(
             int locctr,
-            String operator,
+            StringToken stringToken,
             SymbolTable symbolTable,
             LiteralTable literalTable
     ) throws RuntimeException {
-        Directive directive = Directive.fromString(operator);
+        assert stringToken.getOperator().isPresent();
+
+        Directive directive = Directive.fromString(stringToken.getOperator().get());
         switch (directive) {
             case START, CSECT -> {
+                symbolTable.setCsectName("");
+            }
+            case LTORG -> {
             }
             case BYTE -> {
             }
@@ -116,14 +159,12 @@ public class ControlSection {
             }
             case RESW -> {
             }
-            case LTORG -> {
-            }
             case EQU -> {
             }
             case END -> {
             }
         }
-        return new DirectiveToken(directive, 0, 0);
+        return new DirectiveToken(directive, stringToken.getTokenString(), 0, 0);
     }
 
     /**

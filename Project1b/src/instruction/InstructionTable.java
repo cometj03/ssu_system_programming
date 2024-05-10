@@ -33,8 +33,11 @@ public class InstructionTable {
      * @return 기계어 정보. 없을 경우 empty
      */
     public Optional<Instruction> search(String instructionName) {
-        Instruction inst = instructionMap.get(instructionName);
-        if (inst != null) return Optional.of(inst);
+        String key = instructionName;
+        if (instructionName.startsWith("+")) key = instructionName.substring(1);
+        if (instructionMap.containsKey(key)) {
+            return Optional.ofNullable(instructionMap.get(key));
+        }
         return Optional.empty();
     }
 

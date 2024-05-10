@@ -2,13 +2,11 @@ package symbol;
 
 import java.util.HashMap;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class SymbolTable {
-    /**
-     * 심볼 테이블 객체를 초기화한다.
-     */
     public SymbolTable() {
-        symbolMap = new HashMap<String, Symbol>();
+        symbolMap = new HashMap<>();
     }
 
     /**
@@ -16,16 +14,15 @@ public class SymbolTable {
      *
      * @param label   라벨
      * @param address 심볼의 주소
-     * @throws RuntimeException (TODO: exception 발생 조건을 작성하기)
+     * @throws RuntimeException label의 길이가 6 초과이거나, 중복되어 있을 경우
      */
     public void putLabel(String label, int address) throws RuntimeException {
-        // TODO: EQU를 제외한 명령어/지시어의 label로 생성되는 심볼을 추가하기.
         if (label.length() > 6)
-            throw new RuntimeException("label's length must be <= 6");
+            throw new RuntimeException("label's length is too long: must be <= 6");
         if (symbolMap.containsKey(label))
             throw new RuntimeException("duplicated symbol");
 
-        symbolMap.put(label, new Symbol(label, address));
+        symbolMap.put(label, new Symbol(label, address, csectName));
     }
 
     /**
@@ -37,12 +34,11 @@ public class SymbolTable {
      * @throws RuntimeException equation 파싱 오류
      */
     public void putLabel(String label, int locctr, String equation) throws RuntimeException {
-        // TODO: EQU의 label로 생성되는 심볼을 추가하기.
         if (equation.contains("*")) {
             putLabel(label, locctr);
             return;
         }
-        String[] terms = equation.split("-+");
+        String[] terms = equation.split("[-+]");
         char[] ops = new char[terms.length];
         for (int i = 0, t = 0; i < equation.length(); i++) {
             if (equation.charAt(i) == '-' || equation.charAt(i) == '+') {
@@ -50,16 +46,21 @@ public class SymbolTable {
                 t++;
             }
         }
+        // TODO
     }
 
     /**
      * EXTREF에 operand가 포함되어 있는 경우, 해당 operand를 심볼 테이블에 추가한다.
      *
      * @param refer operand에 적힌 하나의 심볼
-     * @throws RuntimeException (TODO: exception 발생 조건을 작성하기)
+     * @throws RuntimeException refer의 길이가 6 초과이거나, 중복되어 있을 경우
      */
     public void putRefer(String refer) throws RuntimeException {
-        // TODO: EXTREF의 operand로 생성되는 심볼을 추가하기.
+        if (refer.length() > 6)
+            throw new RuntimeException("label's length is too long: must be <= 6");
+        if (symbolMap.containsKey(refer))
+            throw new RuntimeException("duplicated symbol");
+        symbolMap.put(refer, new Symbol(refer, -1, true));
     }
 
     /**
@@ -69,7 +70,9 @@ public class SymbolTable {
      * @return 심볼. 없을 경우 empty
      */
     public Optional<Symbol> searchSymbol(String name) {
-        // TODO: symbolMap에서 name에 해당하는 심볼을 찾아 반환하기.
+        if (symbolMap.containsKey(name)) {
+            return Optional.ofNullable(symbolMap.get(name));
+        }
         return Optional.empty();
     }
 
@@ -89,65 +92,18 @@ public class SymbolTable {
      */
     @Override
     public String toString() {
-        // TODO: 심볼 테이블을 String으로 표현하기. symbol.Symbol 객체의 toString을 활용하자.
-        return "<symbol.SymbolTable.toString()>";
+        return symbolMap.values().stream()
+                .map(sym -> sym.toString())
+                .collect(Collectors.joining("\n"));
     }
 
     /**
      * 심볼 테이블. key: 심볼 명칭, value: 심볼 객체
      */
-    private HashMap<String, Symbol> symbolMap;
-}
+    private final HashMap<String, Symbol> symbolMap;
+    private String csectName = null;
 
-class Symbol {
-    /**
-     * 심볼 객체를 초기화한다.
-     *
-     * @param name    심볼 명칭
-     * @param address 심볼의 절대 주소
-     */
-    public Symbol(String name, int address /* , 추가로 선언한 field들... */) {
-        // TODO: 심볼 객체 초기화.
+    public void setCsectName(String csectName) {
+        this.csectName = csectName;
     }
-
-    /**
-     * 심볼 명칭을 반환한다.
-     *
-     * @return 심볼 명칭
-     */
-    public String getName() {
-        return _name;
-    }
-
-    /**
-     * 심볼의 주소를 반환한다.
-     *
-     * @return 심볼 주소
-     */
-    public int getAddress() {
-        return _address;
-    }
-
-    // TODO: 추가로 선언한 field에 대한 getter 작성하기.
-
-    /**
-     * 심볼을 String으로 변환한다.
-     */
-    @Override
-    public String toString() {
-        // TODO: 심볼을 String으로 표현하기.
-        return "<symbol.Symbol.toString()>";
-    }
-
-    /**
-     * 심볼의 명칭
-     */
-    private String _name;
-
-    /**
-     * 심볼의 주소
-     */
-    private int _address;
-
-    // TODO: 추가로 필요한 field 선언
 }

@@ -28,7 +28,7 @@ public class LiteralTable {
      */
     public Literal putLiteral(String literal) throws RuntimeException {
         // TODO: 리터럴 객체를 생성하고, 이를 리터럴 테이블에 추가하기.
-        Literal lit;
+        Literal lit = null;
 
         return lit;
     }
@@ -41,7 +41,7 @@ public class LiteralTable {
      */
     public Optional<Literal> search(String literal) {
         // TODO: 리터럴을 검색하고, 결과를 반환하기
-        return something;
+        return Optional.empty();
     }
 
     /**
@@ -52,7 +52,7 @@ public class LiteralTable {
      */
     public Optional<Literal> search(int address) {
         // TODO: 리터럴 주소값으로 리터럴을 검색하고, 결과를 반환하기.
-        return something;
+        return Optional.empty();
     }
 
     /**
@@ -63,7 +63,7 @@ public class LiteralTable {
      */
     public int assignAddress(int address) {
         // TODO: 리터럴 주소값 할당하기.
-        int size;
+        int size = 0;
 
         return size;
     }

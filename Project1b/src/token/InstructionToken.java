@@ -1,51 +1,34 @@
 package token;
 
+import instruction.Instruction;
+
 import java.util.List;
-import java.util.Optional;
 
 public class InstructionToken extends Token {
-    /**
-     * 소스 코드 한 줄에 해당하는 토큰을 초기화한다.
-     *
-     * @param input 소스 코드 한 줄에 해당하는 문자열
-     * @throws RuntimeException 소스 코드 컴파일 오류
-     */
-    public InstructionToken(
-            String label, String operator, List<String> operands,
-            int address, int size) throws RuntimeException {
-        super(address, size);
 
-        if (label != null)
-            this.label = Optional.of(label);
-        if (operator != null) {
-            if (operator.startsWith("+")) {
-                nixbpe[0] = true;
-                this.operator = Optional.of(operator.substring(1));
-            } else {
-                this.operator = Optional.of(operator);
-            }
-        }
-        if (operands != null) {
-            this.operands = Optional.of(operands);
-            for (String opnd : operands) {
-                if (opnd.equals("X")) {
-                    nixbpe[3] = true;
-                    continue;
-                }
-                if (opnd.contains("#")) {
-                    nixbpe[4] = true;
-                } else if (opnd.contains("@")) {
-                    nixbpe[5] = true;
-                } else {
-                    nixbpe[4] = true;
-                    nixbpe[5] = true;
-                }
-            }
-        }
+    public InstructionToken(
+            Instruction instruction,
+            List<String> operands,
+            boolean nBit, boolean iBit, boolean xBit, boolean pBit, boolean eBit,
+            String tokenString,
+            int address,
+            int size) throws RuntimeException {
+        super(tokenString, address, size);
+        this.operands = operands;
+        this.instruction = instruction;
+        nixbpe[0] = eBit;
+        nixbpe[1] = pBit;
+//        nixbpe[2] = bBit;
+        nixbpe[3] = xBit;
+        nixbpe[4] = iBit;
+        nixbpe[5] = nBit;
     }
 
-    public void setPcRelative() {
-        nixbpe[2] = true;
+    public byte getNixbpe() {
+        int ret = 0;
+        for (int i = 0; i < 6; i++)
+            if (nixbpe[i]) ret |= (1 << i);
+        return (byte) ret;
     }
 
     /**
@@ -105,30 +88,21 @@ public class InstructionToken extends Token {
      * 않으므로 자유롭게 변경하여 사용한다.
      * 아래 함수는 피연산자에 X가 지정되었더라도 _operands는 X를 저장하지 않고 X bit만 1로 변경한 상태를 가정하였다.
      */
-//    @Override
-//    public String toString() {
-//        String label = _label.orElse("(no label)");
-//        String operator = (isE() ? "+ " : "") + _operator.orElse("(no operator)");
-//        String operand = (isN() ? "@" : "") + (isI() ? "#" : "")
-//                + (_operands.isEmpty() ? "(no operand)" : _operands.stream().collect(Collectors.joining("/")))
-//                + (isX() ? (_operands.isEmpty() ? "X" : "/X") : "");
-//        String comment = _comment.orElse("(no comment)");
-//        return label + '\t' + operator + '\t' + operand + '\t' + comment;
-//    }
-    public Optional<String> getLabel() {
-        return label;
+    @Override
+    public String toString() {
+        String operator = (isE() ? "+ " : "") + this.instruction.getName();
+        String operand = (isN() ? "@" : "") + (isI() ? "#" : "")
+                + (operands.isEmpty() ? "(no operand)" : String.join("/", operands))
+                + (isX() ? (operands.isEmpty() ? "X" : "/X") : "");
+        return operator + '\t' + operand;
     }
 
-    public Optional<String> getOperator() {
-        return operator;
+    public Instruction getInstruction() {
+        return instruction;
     }
 
-    public Optional<List<String>> getOperands() {
+    public List<String> getOperands() {
         return operands;
-    }
-
-    public Optional<String> getComment() {
-        return comment;
     }
 
     /**
@@ -138,8 +112,6 @@ public class InstructionToken extends Token {
      * nixbpe[5[ == n bit
      */
     private final boolean[] nixbpe = new boolean[6];
-    private Optional<String> label = Optional.empty();
-    private Optional<String> operator = Optional.empty();
-    private Optional<List<String>> operands = Optional.empty();
-    private Optional<String> comment = Optional.empty();
+    private final Instruction instruction;
+    private final List<String> operands;
 }

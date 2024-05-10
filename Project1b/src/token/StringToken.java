@@ -1,10 +1,12 @@
 package token;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 public class StringToken {
     public StringToken(String tokenString) throws RuntimeException {
+        this.tokenString = tokenString;
         if (tokenString.startsWith(".")) {
             comment = Optional.of(tokenString);
             return;
@@ -27,6 +29,10 @@ public class StringToken {
             comment = Optional.of(tok[3]);
     }
 
+    public String getTokenString() {
+        return tokenString;
+    }
+
     public Optional<String> getLabel() {
         return label;
     }
@@ -35,7 +41,7 @@ public class StringToken {
         return operator;
     }
 
-    public ArrayList<String> getOperands() {
+    public List<String> getOperands() {
         return operands;
     }
 
@@ -43,8 +49,9 @@ public class StringToken {
         return comment;
     }
 
+    private final String tokenString;
     private Optional<String> label = Optional.empty();
     private Optional<String> operator = Optional.empty();
-    private ArrayList<String> operands = new ArrayList<>();
+    private List<String> operands = new ArrayList<>();
     private Optional<String> comment = Optional.empty();
 }
