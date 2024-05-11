@@ -10,5 +10,11 @@ public class DirectiveToken extends Token {
         this.directiveType = directive;
     }
 
+    public Directive getDirectiveType() {
+        return directiveType;
+    }
+
     private final Directive directiveType;
 }
+
+

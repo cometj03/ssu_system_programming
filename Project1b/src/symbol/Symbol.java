@@ -30,12 +30,13 @@ public class Symbol {
 
     @Override
     public String toString() {
-        String addr = ref ? "REF" : String.format("%#04X", address);
-        return name + "\t" + addr + "\t";
+        String addr = ref ? "REF" : String.format("0x%04X", address);
+        String csect = (!ref && definedCsect != null) ? definedCsect : "";
+        return name + "\t" + addr + "\t" + csect;
     }
 
     private final String definedCsect; // symbol이 정의된 control section 이름
     private final String name;
     private final int address;
-    private boolean ref;
+    private final boolean ref;
 }

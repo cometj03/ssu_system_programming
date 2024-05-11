@@ -2,12 +2,10 @@ import directive.Directive;
 import instruction.Instruction;
 import instruction.InstructionTable;
 import literal.LiteralTable;
+import numeric.Numeric;
 import symbol.Symbol;
 import symbol.SymbolTable;
-import token.DirectiveToken;
-import token.InstructionToken;
-import token.StringToken;
-import token.Token;
+import token.*;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -142,18 +140,25 @@ public class ControlSection {
             SymbolTable symbolTable,
             LiteralTable literalTable
     ) throws RuntimeException {
-        assert stringToken.getOperator().isPresent();
+        String operator = stringToken.getOperator().get();
+        Directive directive = Directive.fromString(operator);
 
-        Directive directive = Directive.fromString(stringToken.getOperator().get());
+        // label check
+        switch (directive) {
+            case START, CSECT, BYTE, WORD, RESB, RESW, EQU:
+                Optional<String> label = stringToken.getLabel();
+                if (label.isEmpty()) throw new RuntimeException("no label with " + operator);
+                symbolTable.setCsectName(label.get());
+        }
         switch (directive) {
             case START, CSECT -> {
-                symbolTable.setCsectName("");
+                return new DirectiveToken(directive, stringToken.getTokenString(), locctr, 0);
             }
             case LTORG -> {
             }
-            case BYTE -> {
-            }
-            case WORD -> {
+            case BYTE, WORD -> {
+                Numeric numeric = new Numeric(stringToken.getOperands().get(0));
+                return new ValueDirectiveToken(directive, numeric, stringToken.getTokenString(), locctr, numeric.getSize());
             }
             case RESB -> {
             }
@@ -165,6 +170,11 @@ public class ControlSection {
             }
         }
         return new DirectiveToken(directive, stringToken.getTokenString(), 0, 0);
+    }
+
+    private static void putSymbol(Optional<String> label, SymbolTable symbolTable, String operator) throws RuntimeException {
+        if (label.isEmpty()) throw new RuntimeException("no label with " + operator);
+        symbolTable.setCsectName(label.get());
     }
 
     /**

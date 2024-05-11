@@ -22,12 +22,7 @@ public class LiteralTable {
         if (!literal.startsWith("="))
             throw new RuntimeException("wrong literal format : " + literal);
 
-        Literal lit;
-        if (literal.startsWith("=C")) {
-            lit = new CharLiteral(literal);
-        } else {
-            lit = new NumericLiteral(literal);
-        }
+        Literal lit = new NumericLiteral(literal);
         literalMap.put(literal, lit);
         unresolvedLiterals.add(literal);
     }
