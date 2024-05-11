@@ -5,34 +5,42 @@ import java.util.HashMap;
 import java.util.List;
 
 public class LiteralTable {
-    /**
-     * 리터럴 테이블을 초기화한다.
-     */
+
     public LiteralTable() {
-        literalMap = new HashMap<String, Literal>();
+        literalMap = new HashMap<>();
     }
 
     /**
      * 리터럴을 리터럴 테이블에 추가한다.
      *
-     * @param literal 추가할 리터럴
+     * @param literalStr 추가할 리터럴
      * @throws RuntimeException 비정상적인 리터럴 서식
      */
-    public void putLiteral(String literal) throws RuntimeException {
-        if (!literal.startsWith("="))
-            throw new RuntimeException("wrong literal format : " + literal);
+    public void putLiteral(String literalStr) throws RuntimeException {
+        if (!literalStr.startsWith("="))
+            throw new RuntimeException("wrong literal format : " + literalStr);
 
-        Literal lit = new NumericLiteral(literal);
-        literalMap.put(literal, lit);
-        unresolvedLiterals.add(literal);
+        literalMap.put(literalStr, new Literal(literalStr));
+        unresolvedLiterals.add(literalStr);
     }
 
-    public void resolveLiteralAddress(int startLocctr) {
-        for (String litKey : unresolvedLiterals) {
-            // todo
-        }
+    /**
+     * @param startLocctr 시작 주소
+     * @return 여기서 주소가 결정된 리터럴 리스트
+     */
+    public List<Literal> resolveLiteralAddress(int startLocctr) throws RuntimeException {
+        List<Literal> newLiterals = new ArrayList<>();
 
+        for (String litKey : unresolvedLiterals) {
+            Literal lit = literalMap.get(litKey);
+            if (lit != null) newLiterals.add(lit);
+            else
+                throw new RuntimeException("unknown literal : " + litKey);
+            lit.setAddress(startLocctr);
+            startLocctr += lit.getSize();
+        }
         unresolvedLiterals.clear();
+        return newLiterals;
     }
 
     /**

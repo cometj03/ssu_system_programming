@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class SymbolTable {
+
     public SymbolTable() {
         symbolMap = new HashMap<>();
     }
@@ -22,27 +23,28 @@ public class SymbolTable {
         if (symbolMap.containsKey(label))
             throw new RuntimeException("duplicated symbol");
 
-        symbolMap.put(label, new Symbol(label, address, csectName));
+        Symbol symbol = new Symbol(label, address, csectName.orElse(null));
+        symbolMap.put(label, symbol);
     }
 
     /**
      * EQU에 label이 포함되어 있는 경우, 해당 label을 심볼 테이블에 추가한다.
      *
-     * @param label    라벨
-     * @param locctr   locctr 값
-     * @param equation equation 문자열
-     * @throws RuntimeException equation 파싱 오류
+     * @param label      라벨
+     * @param locctr     locctr 값
+     * @param expression 수식
+     * @throws RuntimeException expression 파싱 오류
      */
-    public void putLabel(String label, int locctr, String equation) throws RuntimeException {
-        if (equation.contains("*")) {
+    public void putLabel(String label, int locctr, String expression) throws RuntimeException {
+        if (expression.contains("*")) {
             putLabel(label, locctr);
             return;
         }
-        String[] terms = equation.split("[-+]");
+        String[] terms = expression.split("[-+]");
         char[] ops = new char[terms.length];
-        for (int i = 0, t = 0; i < equation.length(); i++) {
-            if (equation.charAt(i) == '-' || equation.charAt(i) == '+') {
-                ops[t] = equation.charAt(i);
+        for (int i = 0, t = 0; i < expression.length(); i++) {
+            if (expression.charAt(i) == '-' || expression.charAt(i) == '+') {
+                ops[t] = expression.charAt(i);
                 t++;
             }
         }
@@ -60,7 +62,7 @@ public class SymbolTable {
             throw new RuntimeException("label's length is too long: must be <= 6");
         if (symbolMap.containsKey(refer))
             throw new RuntimeException("duplicated symbol");
-        symbolMap.put(refer, new Symbol(refer, -1, true));
+        symbolMap.put(refer, new Symbol(refer, true));
     }
 
     /**
@@ -101,9 +103,9 @@ public class SymbolTable {
      * 심볼 테이블. key: 심볼 명칭, value: 심볼 객체
      */
     private final HashMap<String, Symbol> symbolMap;
-    private String csectName = null;
+    private Optional<String> csectName = Optional.empty();
 
     public void setCsectName(String csectName) {
-        this.csectName = csectName;
+        this.csectName = Optional.of(csectName);
     }
 }

@@ -1,6 +1,7 @@
 import directive.Directive;
 import instruction.Instruction;
 import instruction.InstructionTable;
+import literal.Literal;
 import literal.LiteralTable;
 import numeric.Numeric;
 import symbol.Symbol;
@@ -47,6 +48,7 @@ public class ControlSection {
             }
             locctr += token.getSize();
             tokens.add(token);
+            System.out.println(token.getAddress() + "\t" + token.getTokenString());
         }
     }
 
@@ -140,36 +142,83 @@ public class ControlSection {
             SymbolTable symbolTable,
             LiteralTable literalTable
     ) throws RuntimeException {
+        String tokenString = stringToken.getTokenString();
         String operator = stringToken.getOperator().get();
         Directive directive = Directive.fromString(operator);
+        Optional<String> label = stringToken.getLabel();
 
         // label check
         switch (directive) {
             case START, CSECT, BYTE, WORD, RESB, RESW, EQU:
-                Optional<String> label = stringToken.getLabel();
                 if (label.isEmpty()) throw new RuntimeException("no label with " + operator);
-                symbolTable.setCsectName(label.get());
         }
+
         switch (directive) {
             case START, CSECT -> {
-                return new DirectiveToken(directive, stringToken.getTokenString(), locctr, 0);
-            }
-            case LTORG -> {
-            }
-            case BYTE, WORD -> {
-                Numeric numeric = new Numeric(stringToken.getOperands().get(0));
-                return new ValueDirectiveToken(directive, numeric, stringToken.getTokenString(), locctr, numeric.getSize());
-            }
-            case RESB -> {
-            }
-            case RESW -> {
-            }
-            case EQU -> {
+                symbolTable.putLabel(label.get(), 0);
+                symbolTable.setCsectName(label.get());
+                return new DirectiveToken(directive, tokenString, locctr, 0);
             }
             case END -> {
+                return new DirectiveToken(directive, tokenString, locctr, 0);
+            }
+            case LTORG -> {
+                List<Literal> newLiterals = literalTable.resolveLiteralAddress(locctr);
+                List<Numeric> numerics = newLiterals.stream()
+                        .map(lit -> lit.getNumeric()).toList();
+                int size = numerics.stream()
+                        .map(num -> num.getSize())
+                        .reduce(0, (acc, x) -> acc + x);
+                return new ValueDirectiveToken(directive, numerics, tokenString, locctr, size);
+            }
+            case BYTE, WORD -> {
+                symbolTable.putLabel(label.get(), locctr);
+                Numeric numeric;
+                String operand = stringToken.getOperands().get(0);
+
+                if (operand.matches("[CX]'.*'") || operand.matches("[0-9].*")) {
+                    // 전형적인 BYTE, WORD 형식에 맞는 경우
+                    numeric = new Numeric(operand);
+                } else {
+                    // 그렇지 않은 경우 (ex: BUFEND-BUFFER)
+                    numeric = new Numeric(0);
+                    // TODO : modification 설정해주기
+                }
+
+                return new ValueDirectiveToken(directive, numeric, tokenString, locctr, numeric.getSize());
+            }
+            case RESB, RESW -> {
+                symbolTable.putLabel(label.get(), locctr);
+                int size;
+                try {
+                    size = Integer.parseInt(stringToken.getOperands().get(0));
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("failed to parse int : " + stringToken.getOperands().get(0));
+                }
+                if (directive == Directive.RESW) size *= 3;
+                return new DirectiveToken(directive, tokenString, locctr, size);
+            }
+            case EQU -> {
+                if (stringToken.getOperands().isEmpty())
+                    throw new RuntimeException("EQU with no operand.");
+                ;
+                String expression = stringToken.getOperands().get(0);
+                symbolTable.putLabel(label.get(), locctr, expression);
+                // pass 2에서는 사용되지 않음
+                return new DirectiveToken(directive, tokenString, 0, 0);
+            }
+            case EXTREF -> {
+                for (String refSymbol : stringToken.getOperands()) {
+                    symbolTable.putRefer(refSymbol);
+                }
+                // pass 2에서는 쓰이지 않을 예정
+                return new DirectiveToken(directive, tokenString, 0, 0);
+            }
+            case EXTDEF -> {
+                return new DirectiveToken(directive, stringToken.getOperands(), tokenString, 0, 0);
             }
         }
-        return new DirectiveToken(directive, stringToken.getTokenString(), 0, 0);
+        throw new RuntimeException("Unknown directive : \n" + tokenString);
     }
 
     private static void putSymbol(Optional<String> label, SymbolTable symbolTable, String operator) throws RuntimeException {

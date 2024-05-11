@@ -1,15 +1,30 @@
 package literal;
 
+import numeric.Numeric;
+
 import java.util.Optional;
 
-public abstract class Literal {
+public class Literal {
     public Literal(String literal) {
         this.literal = literal;
+        this.numeric = new Numeric(literal);
     }
 
-    public String getLiteral() {
-        return literal;
+    @Override
+    public String toString() {
+        return "<literal.Literal.toString()>";
     }
+
+    /**
+     * 리터럴 주소. 주소가 지정되지 않은 경우 empty
+     */
+    private Optional<Integer> address = Optional.empty();
+    private final String literal;
+    private final Numeric numeric;
+
+    /**
+     * get set
+     */
 
     public Optional<Integer> getAddress() {
         return address;
@@ -19,23 +34,15 @@ public abstract class Literal {
         this.address = Optional.of(address);
     }
 
+    public String getLiteral() {
+        return literal;
+    }
+
     public int getSize() {
-        return size;
+        return numeric.getSize();
     }
 
-    public void setSize(int size) {
-        this.size = size;
+    public Numeric getNumeric() {
+        return numeric;
     }
-
-    @Override
-    public String toString() {
-        return "<literal.Literal.toString()>";
-    }
-
-    private final String literal;
-    /**
-     * 리터럴 주소. 주소가 지정되지 않은 경우 empty
-     */
-    private Optional<Integer> address = Optional.empty();
-    private int size;
 }
