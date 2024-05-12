@@ -47,7 +47,7 @@ public class Instruction {
     /**
      * 기계어의 형식을 반환한다.
      *
-     * @return 기계어의 형식. 1: ~~, 2: ~~, 3: ~~, 4:~~, 5:~~ (본인의 사용 방식에 맞춰 작성한다)
+     * @return 기계어의 형식. 2형식인 경우 피연산자를 레지스터로 갖는다고 가정한다.
      */
     public int getFormat() {
         return format;

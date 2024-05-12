@@ -1,16 +1,156 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 public class ObjectCode {
-	public ObjectCode() {
-		// TODO: 초기화.
-	}
 
-	/**
-	 * ObjectCode 객체를 String으로 변환한다. Assembler.java에서 오브젝트 코드를 출력하는 데에 사용된다.
-	 */
-	@Override
-	public String toString() {
-		// TODO: toString 구현하기.
-		return "<ObjectCode.toString()>";
-	}
+    private Optional<String> sectionName = Optional.empty();
+    private Optional<Integer> startAddress = Optional.empty();
+    private Optional<Integer> programLength = Optional.empty();
+    private Optional<Integer> initialPC = Optional.empty();
+    private final List<Define> defines = new ArrayList<>();
+    private final List<String> refers = new ArrayList<>();
+    private final List<Text> texts = new ArrayList<>();
+    private final List<Modification> modifications = new ArrayList<>();
 
-	// TODO: private field 선언.
+    /**
+     * ObjectCode 객체를 String으로 변환한다. Assembler.java에서 오브젝트 코드를 출력하는 데에 사용된다.
+     */
+    @Override
+    public String toString() throws RuntimeException {
+        if (sectionName.isEmpty() || startAddress.isEmpty() || programLength.isEmpty())
+            throw new RuntimeException("illegal operation");
+
+        String header = String.format("H%-6s%06X%06X\n", sectionName.get(), startAddress.get(), programLength.get());
+
+        String define = this.defines.isEmpty() ? "" : "D" + this.defines.stream()
+                .map(d -> String.format("%-6s%06X", d.symbolName, d.address))
+                .collect(Collectors.joining()) + "\n";
+
+        String refer = this.refers.isEmpty() ? "" : "R" + this.refers.stream()
+                .map(r -> String.format("%-6s", r))
+                .collect(Collectors.joining()) + "\n";
+
+        String text = this.texts.stream()
+                .map(t -> String.format("T%06X%06X%s\n", t.startAddress, t.length, t.getTextContent()))
+                .collect(Collectors.joining());
+
+        String modification = this.modifications.stream()
+                .map(m -> String.format("M%06X%02X%c%-6s\n",
+                        m.startAddress, m.sizeHalfBytes, m.modificationFlag, m.symbol))
+                .collect(Collectors.joining());
+
+        String end = "E" + initialPC
+                .map(x -> String.format("%06X", x))
+                .orElse("");
+
+        return header + refer + text + modification + end;
+    }
+
+    public ObjectCode() {
+    }
+
+    public void setSectionName(String sectionName) {
+        this.sectionName = Optional.of(sectionName);
+    }
+
+    public void setStartAddress(int startAddress) {
+        this.startAddress = Optional.of(startAddress);
+    }
+
+    public void setProgramLength(int programLength) {
+        this.programLength = Optional.of(programLength);
+    }
+
+    public void addDefineSymbol(String symbolName, int address) {
+        defines.add(new Define(symbolName, address));
+    }
+
+    public void addReferSymbol(String symbolName) {
+        refers.add(symbolName);
+    }
+
+    public void addText(int address, String objCode) {
+        Text lastText;
+        if (texts.isEmpty())
+            lastText = addNewTextRecord(address);
+        else
+            lastText = texts.get(texts.size() - 1);
+        // 길이가 초과되면 새로운 텍스트 추가
+        if (lastText.getLength() + objCode.length() > 60) {
+            lastText = addNewTextRecord(address);
+        }
+        lastText.addHexString(objCode);
+    }
+
+    // 새로운 텍스트 레코드를 삽입하고,
+    // 새로 삽입된 객체를 반환합니다.
+    public Text addNewTextRecord(int address) {
+        Text text = new Text(address);
+        texts.add(text);
+        return text;
+    }
+
+    public void addModification(String symbolName, boolean isPlus, int startAddr, int sizeHalfByte) {
+        modifications.add(
+                new Modification(startAddr, sizeHalfByte, isPlus ? '+' : '-', symbolName));
+    }
+
+    public void setInitialPC(int address) {
+        initialPC = Optional.of(address);
+    }
+
+    public static class Text {
+        final int startAddress;
+        private int length;
+        private final StringBuilder textContent;
+
+        Text(int startAddress) {
+            this.startAddress = startAddress;
+            this.length = 0;
+            this.textContent = new StringBuilder();
+        }
+
+        void addByte(byte b) {
+            addHexString(String.format("%X", b));
+        }
+
+        void addHexString(String hex) {
+            length += hex.length();
+            textContent.append(hex);
+        }
+
+        int getLength() {
+            return length;
+        }
+
+        String getTextContent() {
+            return textContent.toString();
+        }
+    }
+
+    static class Modification {
+        final int startAddress;
+        final int sizeHalfBytes;
+        final char modificationFlag; // + or -
+        final String symbol;
+
+        Modification(int startAddress, int sizeHalfBytes, char modificationFlag, String symbol) {
+            this.startAddress = startAddress;
+            this.sizeHalfBytes = sizeHalfBytes;
+            this.modificationFlag = modificationFlag;
+            this.symbol = symbol;
+        }
+    }
+
+    static class Define {
+        final String symbolName;
+        final int address;
+
+        Define(String symbolName, int address) {
+            this.symbolName = symbolName;
+            this.address = address;
+        }
+    }
 }

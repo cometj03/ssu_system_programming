@@ -48,7 +48,7 @@ public class ControlSection {
             }
             locctr += token.getSize();
             tokens.add(token);
-            System.out.println(token.getAddress() + "\t" + token.getTokenString());
+            System.out.println(token.getAddress() + "\t" + token.getTokenString()); // 디버깅 용
         }
     }
 
@@ -64,24 +64,6 @@ public class ControlSection {
         // TODO: pass2 수행하기.
 
         return objCode;
-    }
-
-    /**
-     * 심볼 테이블을 String으로 변환하여 반환한다. Assembler.java에서 심볼 테이블을 출력하는 데에 사용된다.
-     *
-     * @return 문자열로 변경된 심볼 테이블
-     */
-    public String getSymbolString() {
-        return symbolTable.toString();
-    }
-
-    /**
-     * 리터럴 테이블을 String으로 변환하여 반환한다. Assembler.java에서 리터럴 테이블을 출력하는 데에 사용된다.
-     *
-     * @return 문자열로 변경된 리터럴 테이블
-     */
-    public String getLiteralString() {
-        return literalTable.toString();
     }
 
     private static InstructionToken handlePass1Instruction(
@@ -105,6 +87,7 @@ public class ControlSection {
             symbolTable.putLabel(label, locctr);
         }
 
+        // TODO: operand 구분 확실히 -> Operand 객체로 변환
         for (String opnd : stringToken.getOperands()) {
             if (opnd.equals("X")) {
                 xBit = true;
@@ -140,8 +123,7 @@ public class ControlSection {
             int locctr,
             StringToken stringToken,
             SymbolTable symbolTable,
-            LiteralTable literalTable
-    ) throws RuntimeException {
+            LiteralTable literalTable) throws RuntimeException {
         String tokenString = stringToken.getTokenString();
         String operator = stringToken.getOperator().get();
         Directive directive = Directive.fromString(operator);
@@ -221,28 +203,26 @@ public class ControlSection {
         throw new RuntimeException("Unknown directive : \n" + tokenString);
     }
 
-    private static void putSymbol(Optional<String> label, SymbolTable symbolTable, String operator) throws RuntimeException {
-        if (label.isEmpty()) throw new RuntimeException("no label with " + operator);
-        symbolTable.setCsectName(label.get());
+    /**
+     * 심볼 테이블을 String으로 변환하여 반환한다. Assembler.java에서 심볼 테이블을 출력하는 데에 사용된다.
+     *
+     * @return 문자열로 변경된 심볼 테이블
+     */
+    public String getSymbolString() {
+        return symbolTable.toString();
     }
 
     /**
-     * 기계어 목록 테이블
+     * 리터럴 테이블을 String으로 변환하여 반환한다. Assembler.java에서 리터럴 테이블을 출력하는 데에 사용된다.
+     *
+     * @return 문자열로 변경된 리터럴 테이블
      */
+    public String getLiteralString() {
+        return literalTable.toString();
+    }
+
     private InstructionTable instTable;
-
-    /**
-     * 토큰 테이블
-     */
     private ArrayList<Token> tokens;
-
-    /**
-     * 심볼 테이블
-     */
     private SymbolTable symbolTable;
-
-    /**
-     * 리터럴 테이블
-     */
     private LiteralTable literalTable;
 }
