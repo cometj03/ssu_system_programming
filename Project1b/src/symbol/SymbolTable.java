@@ -108,4 +108,8 @@ public class SymbolTable {
     public void setCsectName(String csectName) {
         this.csectName = Optional.of(csectName);
     }
+
+    public Optional<String> getCsectName() {
+        return csectName;
+    }
 }

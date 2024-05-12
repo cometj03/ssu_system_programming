@@ -1,10 +1,46 @@
 package token;
 
 import instruction.Instruction;
+import instruction.operand.Register;
+import symbol.Symbol;
+import symbol.SymbolTable;
 
 import java.util.List;
+import java.util.Optional;
 
 public class InstructionToken extends Token {
+
+    public static class TextInfo {
+        private final int opcode;
+        private final int nixbpe;
+        private final int displacement;
+        private final int sizeHalfBytes;
+
+        TextInfo(int opcode, byte nixbpe, int displacement, int sizeHalfBytes) {
+            this.opcode = opcode & 0x3F;
+            this.nixbpe = nixbpe & 0xFF;
+            this.displacement = displacement;
+            this.sizeHalfBytes = sizeHalfBytes;
+        }
+
+        public String generateText() throws RuntimeException {
+            switch (sizeHalfBytes) {
+                case 2 -> {
+                    return String.format("%02X", opcode);
+                }
+                case 4 -> {
+                    return String.format("%04X", (opcode << 8) | (displacement & 0xF));
+                }
+                case 6 -> {
+                    return String.format("%06X", (opcode << 18) | (nixbpe << 12) | (displacement & 0xFFF));
+                }
+                case 8 -> {
+                    return String.format("%08X", (opcode << 26) | (nixbpe << 20) | (displacement & 0xFFFFF));
+                }
+                default -> throw new RuntimeException("illegal text size : " + sizeHalfBytes);
+            }
+        }
+    }
 
     public InstructionToken(
             Instruction instruction,
@@ -24,6 +60,70 @@ public class InstructionToken extends Token {
         nixbpe[5] = nBit;
     }
 
+    public TextInfo getTextInfo(SymbolTable symbolTable) throws RuntimeException {
+        int PC = getAddress() + getSize();
+        int opcode = instruction.getOpcode() & 0x3F;
+
+        // 3형식인 명령어는 피연산자 하나만 가짐 (immediate, symbol, indirect)
+        if (instruction.getFormat() == 3) {
+            if (operands.isEmpty())
+                throw new RuntimeException("missing operands\n" +
+                        "(no operands)\t" + getTokenString());
+            String operand = operands.get(0);
+
+            int addr = 0;
+            if (isI()) {
+                // immediate 일 때
+                try {
+                    addr = Integer.parseInt(operand.substring(1));
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException("failed to parse int : " + operand +
+                            "\n(immediate operand parse error)\t" + getTokenString());
+                }
+            } else {
+                // symbol, indirect 일 때
+                if (isN()) operand = operand.substring(1);
+                Optional<Symbol> symbol = symbolTable.searchSymbol(operand);
+                if (symbol.isEmpty())
+                    throw new RuntimeException("missing symbol definition\n" +
+                            "(no label)\t" + getTokenString());
+                // reference이면 addr 부분은 0
+                if (symbol.get().isReference()) {
+                    addr = 0;
+                    // TODO modification
+                } else {
+                    addr = symbol.get().getAddress() - PC;
+                }
+            }
+            return new TextInfo(opcode, getNixbpe(), addr, isE() ? 8 : 6);
+        }
+
+        // 2형식인 경우
+        // 피연산자가 레지스터 1개 또는 2개이다
+        if (instruction.getFormat() == 2) {
+            List<Register> regOps = operands.stream()
+                    .map(x -> {
+                        try {
+                            return Register.stringToRegister(x);
+                        } catch (RuntimeException e) {
+                            throw new RuntimeException(e.getMessage() +
+                                    "\n(illegal reg operand)\t" + getTokenString());
+                        }
+                    }).toList();
+            int requiredOperandCnt = instruction.getNumberOfOperand();
+            if (regOps.size() > 2 || regOps.size() != requiredOperandCnt)
+                throw new RuntimeException(requiredOperandCnt + " operand(s) are required.\n" +
+                        "(mismatch of reg operand count)\t" + getTokenString());
+
+            int addr = 0;
+            addr |= (regOps.get(0).getValue() & 0x3) << 2;
+            if (requiredOperandCnt == 2) addr |= regOps.get(1).getValue() & 0x3;
+            return new TextInfo(opcode, (byte) 0, addr, 4);
+        }
+        // 1형식인 경우
+        return new TextInfo(opcode, (byte) 0, 0, 2);
+    }
+
     public byte getNixbpe() {
         int ret = 0;
         for (int i = 0; i < 6; i++)
@@ -31,29 +131,14 @@ public class InstructionToken extends Token {
         return (byte) ret;
     }
 
-    /**
-     * 토큰의 iNdirect bit가 1인지 여부를 반환한다.
-     *
-     * @return N bit가 1인지 여부
-     */
     public boolean isN() {
         return nixbpe[5];
     }
 
-    /**
-     * 토큰의 Immediate bit가 1인지 여부를 반환한다.
-     *
-     * @return I bit가 1인지 여부
-     */
     public boolean isI() {
         return nixbpe[4];
     }
 
-    /**
-     * 토큰의 indeX bit가 1인지 여부를 반환한다.
-     *
-     * @return X bit가 1인지 여부
-     */
     public boolean isX() {
         return nixbpe[3];
     }
@@ -65,20 +150,10 @@ public class InstructionToken extends Token {
      * }
      */
 
-    /**
-     * 토큰의 Pc relative bit가 1인지 여부를 반환한다.
-     *
-     * @return P bit가 1인지 여부
-     */
     public boolean isP() {
         return nixbpe[1];
     }
 
-    /**
-     * 토큰의 Extra bit가 1인지 여부를 반환한다.
-     *
-     * @return E bit가 1인지 여부
-     */
     public boolean isE() {
         return nixbpe[0];
     }

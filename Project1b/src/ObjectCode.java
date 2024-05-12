@@ -74,22 +74,32 @@ public class ObjectCode {
     public void addText(int address, String text) {
         Text lastText;
         if (texts.isEmpty())
-            lastText = addNewTextRecord(address);
+            lastText = addTextNewLine(address);
         else
             lastText = texts.get(texts.size() - 1);
+
+        // 아직 내용이 없으면 시작주소 갱신 (RESB, RESW가 연속으로 있을 때를 고려) 
+        if (lastText.getLength() == 0) {
+            lastText.setStartAddress(address);
+        }
+
         // 길이가 초과되면 새로운 텍스트 추가
         if (lastText.getLength() + text.length() > 60) {
-            lastText = addNewTextRecord(address);
+            lastText = addTextNewLine(address);
         }
         lastText.addHexString(text);
     }
 
     // 새로운 텍스트 레코드를 삽입하고,
     // 새로 삽입된 객체를 반환합니다.
-    public Text addNewTextRecord(int address) {
-        Text text = new Text(address);
-        texts.add(text);
-        return text;
+    public Text addTextNewLine(int address) {
+        // 비어있거나 마지막 text의 내용이 있을 경우에만 추가
+        if (texts.isEmpty() || texts.get(texts.size() - 1).getLength() > 0) {
+            Text text = new Text(address);
+            texts.add(text);
+            return text;
+        }
+        return null;
     }
 
     public void addModification(String symbolName, boolean isPlus, int startAddr, int sizeHalfByte) {
@@ -102,7 +112,7 @@ public class ObjectCode {
     }
 
     public static class Text {
-        final int startAddress;
+        private int startAddress;
         private int length;
         private final StringBuilder textContent;
 
@@ -123,6 +133,10 @@ public class ObjectCode {
 
         int getLength() {
             return length;
+        }
+
+        void setStartAddress(int startAddress) {
+            this.startAddress = startAddress;
         }
 
         String getTextContent() {

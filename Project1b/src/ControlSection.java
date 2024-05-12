@@ -202,13 +202,56 @@ public class ControlSection {
                         .collect(Collectors.joining());
                 objCode.addText(token.getAddress(), value);
             } else if (token instanceof InstructionToken) {
-
+                handlePass2Instruction(objCode, (InstructionToken) token);
             } else if (token instanceof DirectiveToken) {
-
+                handlePass2Directive(objCode, (DirectiveToken) token);
             } else
                 throw new RuntimeException("invalid operation");
         }
         return objCode;
+    }
+
+    /**
+     * @param objCode
+     * @param token
+     */
+    private void handlePass2Instruction(ObjectCode objCode, InstructionToken token) {
+        InstructionToken.TextInfo textInfo = token.getTextInfo(symbolTable);
+        objCode.addText(token.getAddress(), textInfo.generateText());
+
+        // todo modification
+    }
+
+    private void handlePass2Directive(ObjectCode objCode, DirectiveToken token) throws RuntimeException {
+        Optional<String> csectName = symbolTable.getCsectName();
+        if (csectName.isEmpty())
+            throw new RuntimeException("invalid operation : there is no control section name.");
+
+        Directive directive = token.getDirectiveType();
+
+        switch (directive) {
+            case START -> {
+                objCode.setSectionName(csectName.get());
+                objCode.setStartAddress(token.getAddress());
+            }
+            case CSECT -> {
+                objCode.setSectionName(csectName.get());
+                objCode.setStartAddress(0);
+            }
+            case EXTDEF -> {
+                // TOOD
+            }
+            case END -> {
+                // TODO
+            }
+            case RESB, RESW -> {
+                // 새로운 텍스트 레코드 생성
+                objCode.addTextNewLine(token.getAddress());
+            }
+            case EQU, BYTE, WORD, LTORG -> {
+                // 처리할 동작 없음
+            }
+        }
     }
 
     /**
