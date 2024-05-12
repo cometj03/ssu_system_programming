@@ -45,7 +45,7 @@ public class ObjectCode {
                 .map(x -> String.format("%06X", x))
                 .orElse("");
 
-        return header + refer + text + modification + end;
+        return header + refer + define + text + modification + end;
     }
 
     public ObjectCode() {
@@ -63,8 +63,8 @@ public class ObjectCode {
         this.programLength = Optional.of(programLength);
     }
 
-    public void addDefineSymbol(String symbolName, int address) {
-        defines.add(new Define(symbolName, address));
+    public void addDefineSymbol(String symbolName, int addr) {
+        defines.add(new Define(symbolName, addr));
     }
 
     public void addReferSymbol(String symbolName) {

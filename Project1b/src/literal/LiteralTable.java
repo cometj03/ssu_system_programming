@@ -3,6 +3,7 @@ package literal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 
 public class LiteralTable {
 
@@ -43,13 +44,18 @@ public class LiteralTable {
         return newLiterals;
     }
 
-    /**
-     * 리터럴 테이블을 String으로 변환한다.
-     */
+    public Optional<Literal> searchLiteral(String str) {
+        if (literalMap.containsKey(str)) {
+            return Optional.ofNullable(literalMap.get(str));
+        }
+        return Optional.empty();
+    }
+
     @Override
     public String toString() {
-        // TODO: 구현하기. literal.Literal 객체의 toString을 활용하자.
-        return "<literal.LiteralTable.toString()>";
+        StringBuilder builder = new StringBuilder();
+        literalMap.forEach((k, v) -> builder.append(v.toString()).append("\n"));
+        return builder.toString();
     }
 
     /**

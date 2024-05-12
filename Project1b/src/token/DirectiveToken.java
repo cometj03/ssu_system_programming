@@ -11,6 +11,7 @@ public class DirectiveToken extends Token {
                           String tokenString, int address, int size) {
         super(tokenString, address, size);
         this.directiveType = directive;
+        this.operands = Optional.empty();
     }
 
     public DirectiveToken(Directive directive, List<String> operands,
@@ -21,6 +22,10 @@ public class DirectiveToken extends Token {
 
     public Directive getDirectiveType() {
         return directiveType;
+    }
+
+    public Optional<List<String>> getOperands() {
+        return operands;
     }
 
     private final Directive directiveType;

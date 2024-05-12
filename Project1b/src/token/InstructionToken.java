@@ -2,6 +2,8 @@ package token;
 
 import instruction.Instruction;
 import instruction.operand.Register;
+import literal.Literal;
+import literal.LiteralTable;
 import symbol.Symbol;
 import symbol.SymbolTable;
 
@@ -60,7 +62,7 @@ public class InstructionToken extends Token {
         nixbpe[5] = nBit;
     }
 
-    public TextInfo getTextInfo(SymbolTable symbolTable) throws RuntimeException {
+    public TextInfo getTextInfo(SymbolTable symbolTable, LiteralTable literalTable) throws RuntimeException {
         int PC = getAddress() + getSize();
         int opcode = instruction.getOpcode() & 0x3F;
 
@@ -80,15 +82,28 @@ public class InstructionToken extends Token {
                     throw new RuntimeException("failed to parse int : " + operand +
                             "\n(immediate operand parse error)\t" + getTokenString());
                 }
+            } else if (operand.startsWith("=")) {
+                // 리터럴일 때
+                Optional<Literal> literal = literalTable.searchLiteral(operand);
+                if (literal.isEmpty())
+                    throw new RuntimeException("missing literal definition\n" +
+                            "(no literal)\t" + getTokenString());
+                if (literal.get().getAddress().isEmpty())
+                    throw new RuntimeException("literal " + literal.get().getLiteral() + "'s address is not defined yet.");
+                addr = literal.get().getAddress().get() - PC;
             } else {
                 // symbol, indirect 일 때
                 if (isN()) operand = operand.substring(1);
                 Optional<Symbol> symbol = symbolTable.searchSymbol(operand);
-                if (symbol.isEmpty())
-                    throw new RuntimeException("missing symbol definition\n" +
+                if (instruction.getNumberOfOperand() > 0 && symbol.isEmpty())
+                    throw new RuntimeException("missing symbol definition\n" + operand +
                             "(no label)\t" + getTokenString());
-                // reference이면 addr 부분은 0
-                if (symbol.get().isReference()) {
+
+                if (instruction.getNumberOfOperand() == 0) {
+                    addr = 0;
+                    // do nothing
+                } else if (symbol.get().isReference()) {
+                    // reference이면 addr 부분은 0
                     addr = 0;
                     // TODO modification
                 } else {
@@ -112,8 +127,8 @@ public class InstructionToken extends Token {
                     }).toList();
             int requiredOperandCnt = instruction.getNumberOfOperand();
             if (regOps.size() > 2 || regOps.size() != requiredOperandCnt)
-                throw new RuntimeException(requiredOperandCnt + " operand(s) are required.\n" +
-                        "(mismatch of reg operand count)\t" + getTokenString());
+                throw new RuntimeException(requiredOperandCnt + " operand(s) are required. detected : " + regOps.size() +
+                        "\n(mismatch of reg operand count)\t" + getTokenString());
 
             int addr = 0;
             addr |= (regOps.get(0).getValue() & 0x3) << 2;

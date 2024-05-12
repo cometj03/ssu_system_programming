@@ -48,7 +48,8 @@ public class ControlSection {
             }
             locctr += token.getSize();
             tokens.add(token);
-            System.out.println(token.getAddress() + "\t" + token.getTokenString()); // 디버깅 용
+//            System.out.println(token.getAddress() + "\t" + token.getTokenString()); // 디버깅 용
+//            System.out.println(stringToken.getOperands().size());
         }
     }
 
@@ -72,7 +73,8 @@ public class ControlSection {
 
         // TODO: operand 구분 확실히 -> Operand 객체로 변환
         for (String opnd : stringToken.getOperands()) {
-            if (opnd.equals("X")) {
+            if (opnd.equals("X") && instruction.getFormat() != 2) {
+                // 2형식인 경우 X가 레지스터를 의미하기 때문
                 xBit = true;
                 continue;
             }
@@ -124,7 +126,17 @@ public class ControlSection {
                 return new DirectiveToken(directive, tokenString, locctr, 0);
             }
             case END -> {
-                return new DirectiveToken(directive, tokenString, locctr, 0);
+                List<Literal> newLiterals = literalTable.resolveLiteralAddress(locctr);
+                if (newLiterals.isEmpty()) {
+                    return new DirectiveToken(directive, tokenString, locctr, 0);
+                }
+                // 리터럴이 남아있으면 처리
+                List<Numeric> numerics = newLiterals.stream()
+                        .map(lit -> lit.getNumeric()).toList();
+                int size = numerics.stream()
+                        .map(num -> num.getSize())
+                        .reduce(0, (acc, x) -> acc + x);
+                return new ValueDirectiveToken(directive, numerics, tokenString, locctr + size, size);
             }
             case LTORG -> {
                 List<Literal> newLiterals = literalTable.resolveLiteralAddress(locctr);
@@ -175,8 +187,7 @@ public class ControlSection {
                 for (String refSymbol : stringToken.getOperands()) {
                     symbolTable.putRefer(refSymbol);
                 }
-                // pass 2에서는 쓰이지 않을 예정
-                return new DirectiveToken(directive, tokenString, 0, 0);
+                return new DirectiveToken(directive, stringToken.getOperands(), tokenString, 0, 0);
             }
             case EXTDEF -> {
                 return new DirectiveToken(directive, stringToken.getOperands(), tokenString, 0, 0);
@@ -195,16 +206,21 @@ public class ControlSection {
         ObjectCode objCode = new ObjectCode();
 
         for (Token token : tokens) {
-            if (token instanceof ValueDirectiveToken) {
-                List<Numeric> numerics = ((ValueDirectiveToken) token).getNumerics();
-                String value = numerics.stream()
-                        .map(numeric -> numeric.packValue())
-                        .collect(Collectors.joining());
-                objCode.addText(token.getAddress(), value);
-            } else if (token instanceof InstructionToken) {
+            if (token instanceof InstructionToken) {
                 handlePass2Instruction(objCode, (InstructionToken) token);
             } else if (token instanceof DirectiveToken) {
-                handlePass2Directive(objCode, (DirectiveToken) token);
+                if (((DirectiveToken) token).getDirectiveType() == Directive.END) {
+                    objCode.setProgramLength(token.getAddress());
+                }
+                if (token instanceof ValueDirectiveToken) {
+                    List<Numeric> numerics = ((ValueDirectiveToken) token).getNumerics();
+                    String value = numerics.stream()
+                            .map(numeric -> numeric.packValue())
+                            .collect(Collectors.joining());
+                    objCode.addText(token.getAddress(), value);
+                } else {
+                    handlePass2Directive(objCode, (DirectiveToken) token);
+                }
             } else
                 throw new RuntimeException("invalid operation");
         }
@@ -216,7 +232,7 @@ public class ControlSection {
      * @param token
      */
     private void handlePass2Instruction(ObjectCode objCode, InstructionToken token) {
-        InstructionToken.TextInfo textInfo = token.getTextInfo(symbolTable);
+        InstructionToken.TextInfo textInfo = token.getTextInfo(symbolTable, literalTable);
         objCode.addText(token.getAddress(), textInfo.generateText());
 
         // todo modification
@@ -233,16 +249,27 @@ public class ControlSection {
             case START -> {
                 objCode.setSectionName(csectName.get());
                 objCode.setStartAddress(token.getAddress());
+                objCode.setInitialPC(token.getAddress());
             }
             case CSECT -> {
                 objCode.setSectionName(csectName.get());
                 objCode.setStartAddress(0);
             }
             case EXTDEF -> {
-                // TOOD
+                if (token.getOperands().isPresent()) {
+                    for (String def : token.getOperands().get()) {
+                        objCode.addDefineSymbol(def, symbolTable.getAddress(def).orElse(0));
+                    }
+                }
+            }
+            case EXTREF -> {
+                if (token.getOperands().isPresent()) {
+                    for (String ref : token.getOperands().get())
+                        objCode.addReferSymbol(ref);
+                }
             }
             case END -> {
-                // TODO
+                objCode.setProgramLength(token.getAddress());
             }
             case RESB, RESW -> {
                 // 새로운 텍스트 레코드 생성

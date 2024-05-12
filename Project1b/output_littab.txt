@@ -1,5 +1,6 @@
-<literal.LiteralTable.toString()>
+=C'EOF'	0x0030
 
-<literal.LiteralTable.toString()>
 
-<literal.LiteralTable.toString()>
+
+
+=X'05'	0x001C

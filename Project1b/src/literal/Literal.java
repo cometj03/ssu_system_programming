@@ -11,8 +11,10 @@ public class Literal {
     }
 
     @Override
-    public String toString() {
-        return "<literal.Literal.toString()>";
+    public String toString() throws RuntimeException {
+        if (address.isEmpty())
+            throw new RuntimeException("Literal.toString(): " + literal + "'s address is not defined yet.");
+        return literal + "\t" + String.format("0x%04X", address.get());
     }
 
     /**
