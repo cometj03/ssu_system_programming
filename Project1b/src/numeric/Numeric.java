@@ -1,9 +1,7 @@
 package numeric;
 
 public class Numeric {
-    /**
-     * EQU에서 수식처리 (*, A, A-B)
-     */
+
     public Numeric(int value) {
         // int의 앞 3바이트만 다룹니다
         // value < 2^24
@@ -63,8 +61,13 @@ public class Numeric {
         }
     }
 
-    public byte[] getBytes() {
-        return bytes;
+    // bytes를 16진수 문자열로 변환한 값을 리턴합니다.
+    public String packValue() {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < size; i++) {
+            builder.append(String.format("%02X", bytes[i]));
+        }
+        return builder.toString();
     }
 
     public int getSize() {

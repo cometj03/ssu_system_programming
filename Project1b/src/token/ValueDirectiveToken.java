@@ -18,5 +18,9 @@ public class ValueDirectiveToken extends DirectiveToken {
         this(directive, List.of(numeric), tokenString, address, size);
     }
 
+    public List<Numeric> getNumerics() {
+        return numerics;
+    }
+
     private final List<Numeric> numerics;
 }

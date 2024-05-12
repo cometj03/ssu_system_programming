@@ -11,6 +11,7 @@ import token.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class ControlSection {
     /**
@@ -29,7 +30,6 @@ public class ControlSection {
 
         List<StringToken> stringTokens = input.stream().map(x -> new StringToken(x)).toList();
 
-        int locctr = 0;
         for (StringToken stringToken : stringTokens) {
             if (stringToken.getOperator().isEmpty()) {
                 continue;
@@ -41,10 +41,10 @@ public class ControlSection {
             Token token;
             if (inst.isPresent()) {
                 // 명령어 수행
-                token = handlePass1Instruction(locctr, stringToken, inst.get(), symbolTable, literalTable);
+                token = handlePass1Instruction(stringToken, inst.get());
             } else {
                 // 지시어 수행
-                token = handlePass1Directive(locctr, stringToken, symbolTable, literalTable);
+                token = handlePass1Directive(stringToken);
             }
             locctr += token.getSize();
             tokens.add(token);
@@ -52,26 +52,9 @@ public class ControlSection {
         }
     }
 
-    /**
-     * pass2 작업을 수행한다. pass1에서 초기화한 토큰 테이블, 심볼 테이블 및 리터럴 테이블을 통해 오브젝트 코드를 생성한다.
-     *
-     * @return 해당 control section에 해당하는 오브젝트 코드 객체
-     * @throws RuntimeException 소스 코드 컴파일 오류
-     */
-    public ObjectCode buildObjectCode() throws RuntimeException {
-        ObjectCode objCode = new ObjectCode();
-
-        // TODO: pass2 수행하기.
-
-        return objCode;
-    }
-
-    private static InstructionToken handlePass1Instruction(
-            int locctr,
+    private InstructionToken handlePass1Instruction(
             StringToken stringToken,
-            Instruction instruction,
-            SymbolTable symbolTable,
-            LiteralTable literalTable) throws RuntimeException {
+            Instruction instruction) throws RuntimeException {
         List<String> operands = new ArrayList<>();
         int size = instruction.getFormat();
         boolean nBit, iBit, xBit, pBit, eBit;
@@ -119,11 +102,7 @@ public class ControlSection {
                 nBit, iBit, xBit, pBit, eBit, stringToken.getTokenString(), locctr, size);
     }
 
-    private static DirectiveToken handlePass1Directive(
-            int locctr,
-            StringToken stringToken,
-            SymbolTable symbolTable,
-            LiteralTable literalTable) throws RuntimeException {
+    private DirectiveToken handlePass1Directive(StringToken stringToken) throws RuntimeException {
         String tokenString = stringToken.getTokenString();
         String operator = stringToken.getOperator().get();
         Directive directive = Directive.fromString(operator);
@@ -137,7 +116,10 @@ public class ControlSection {
 
         switch (directive) {
             case START, CSECT -> {
-                symbolTable.putLabel(label.get(), 0);
+                if (!stringToken.getOperands().isEmpty()) {
+                    locctr = Integer.parseInt(stringToken.getOperands().get(0));
+                }
+                symbolTable.putLabel(label.get(), locctr);
                 symbolTable.setCsectName(label.get());
                 return new DirectiveToken(directive, tokenString, locctr, 0);
             }
@@ -204,6 +186,32 @@ public class ControlSection {
     }
 
     /**
+     * pass2 작업을 수행한다. pass1에서 초기화한 토큰 테이블, 심볼 테이블 및 리터럴 테이블을 통해 오브젝트 코드를 생성한다.
+     *
+     * @return 해당 control section에 해당하는 오브젝트 코드 객체
+     * @throws RuntimeException 소스 코드 컴파일 오류
+     */
+    public ObjectCode buildObjectCode() throws RuntimeException {
+        ObjectCode objCode = new ObjectCode();
+
+        for (Token token : tokens) {
+            if (token instanceof ValueDirectiveToken) {
+                List<Numeric> numerics = ((ValueDirectiveToken) token).getNumerics();
+                String value = numerics.stream()
+                        .map(numeric -> numeric.packValue())
+                        .collect(Collectors.joining());
+                objCode.addText(token.getAddress(), value);
+            } else if (token instanceof InstructionToken) {
+
+            } else if (token instanceof DirectiveToken) {
+
+            } else
+                throw new RuntimeException("invalid operation");
+        }
+        return objCode;
+    }
+
+    /**
      * 심볼 테이블을 String으로 변환하여 반환한다. Assembler.java에서 심볼 테이블을 출력하는 데에 사용된다.
      *
      * @return 문자열로 변경된 심볼 테이블
@@ -225,4 +233,5 @@ public class ControlSection {
     private ArrayList<Token> tokens;
     private SymbolTable symbolTable;
     private LiteralTable literalTable;
+    private int locctr = 0;
 }

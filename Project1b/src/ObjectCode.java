@@ -71,17 +71,17 @@ public class ObjectCode {
         refers.add(symbolName);
     }
 
-    public void addText(int address, String objCode) {
+    public void addText(int address, String text) {
         Text lastText;
         if (texts.isEmpty())
             lastText = addNewTextRecord(address);
         else
             lastText = texts.get(texts.size() - 1);
         // 길이가 초과되면 새로운 텍스트 추가
-        if (lastText.getLength() + objCode.length() > 60) {
+        if (lastText.getLength() + text.length() > 60) {
             lastText = addNewTextRecord(address);
         }
-        lastText.addHexString(objCode);
+        lastText.addHexString(text);
     }
 
     // 새로운 텍스트 레코드를 삽입하고,
