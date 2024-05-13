@@ -65,7 +65,7 @@ public class Numeric {
     public String packValue() {
         StringBuilder builder = new StringBuilder();
         for (int i = 0; i < size; i++) {
-            builder.append(String.format("%02X", bytes[i]));
+            builder.append(String.format("%02X", bytes[i] & 0xFF));
         }
         return builder.toString();
     }
