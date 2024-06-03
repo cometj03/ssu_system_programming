@@ -1,3 +1,5 @@
+import simulator.Simulator;
+
 import javax.swing.*;
 import java.io.File;
 
@@ -7,6 +9,8 @@ import java.io.File;
  */
 public class VisualSimulator extends JFrame {
 
+    private final Simulator simulator;
+
     public static void main(String[] args) {
         VisualSimulator simulator = new VisualSimulator();
         simulator.setVisible(true);
@@ -15,13 +19,14 @@ public class VisualSimulator extends JFrame {
 
     public VisualSimulator() {
         super();
+        simulator = new Simulator();
         uiInit();
     }
 
     private void uiInit() {
         this.setSize(500, 700);
         this.setContentPane(MainPanel);
-        this.setTitle("SIC/XE Visual Simulator");
+        this.setTitle("SIC/XE Visual simulator.Simulator");
 
         exitButton.addActionListener(e -> dispose());
         openButton.addActionListener(e -> {
