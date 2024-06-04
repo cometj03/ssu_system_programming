@@ -20,6 +20,10 @@ public class ResourceManager {
             registers.add(new Register());
     }
 
+    public Memory getMemory() {
+        return this.memory;
+    }
+
     private Register getRegister(int reg) throws RuntimeException {
         return switch (reg) {
             case 0 -> registers.get(0);

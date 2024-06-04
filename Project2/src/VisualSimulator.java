@@ -1,7 +1,9 @@
 import simulator.Simulator;
 
 import javax.swing.*;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.io.File;
+import java.io.IOException;
 
 /**
  * 시뮬레이터의 동작을 GUI 방식으로 보여주는 모듈
@@ -12,14 +14,20 @@ public class VisualSimulator extends JFrame {
     private final Simulator simulator;
 
     public static void main(String[] args) {
-        VisualSimulator simulator = new VisualSimulator();
-        simulator.setVisible(true);
-        simulator.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        try {
+            VisualSimulator simulator = new VisualSimulator();
+            simulator.setVisible(true);
+            simulator.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        } catch (IOException e) {
+            System.out.println("IOException : " + e.getMessage());
+        } catch (RuntimeException e) {
+            System.out.println("RuntimeException : " + e.getMessage());
+        }
     }
 
-    public VisualSimulator() {
+    public VisualSimulator() throws IOException {
         super();
-        simulator = new Simulator();
+        this.simulator = new Simulator();
         uiInit();
     }
 
@@ -32,6 +40,7 @@ public class VisualSimulator extends JFrame {
         openButton.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
+            fileChooser.addChoosableFileFilter(new FileNameExtensionFilter("object file", "obj"));
             int returnVal = fileChooser.showOpenDialog(VisualSimulator.this);
 
             if (returnVal == JFileChooser.APPROVE_OPTION) {

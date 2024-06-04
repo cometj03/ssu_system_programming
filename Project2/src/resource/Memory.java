@@ -4,13 +4,21 @@ public class Memory {
     private final int capacity;
     private final int[] mem;
 
-    Memory() {
+    public Memory() {
         this(10000);
     }
 
-    Memory(int capacity) {
+    public Memory(int capacity) {
         this.capacity = capacity;
         this.mem = new int[capacity];
+    }
+
+    public String getMemString(int startAddr, int bytes) {
+        StringBuilder builder = new StringBuilder(bytes * 2);
+        for (int i = 0; i < bytes; i++) {
+            builder.append(String.format("%02X", mem[i + startAddr]));
+        }
+        return builder.toString();
     }
 
     public int getMemValue(int startAddr, int bytes) {
@@ -40,5 +48,9 @@ public class Memory {
         System.out.println(mem.getMemValue(1, 1)); // 32
         System.out.println(mem.getMemValue(2, 1)); // 39
         System.out.println(mem.getMemValue(0, 3)); // 1515559
+
+        int val = mem.getMemValue(0, 3);
+        mem.setMem(0, String.format("%06X", val + 1));
+        System.out.println(mem.getMemValue(0, 3)); // 1515560
     }
 }
