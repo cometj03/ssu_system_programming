@@ -47,7 +47,7 @@ public class Loader {
 
         // pass 1
         // external symbol table 채우기
-        int csectStartAddr = programLoadAddr;
+        int csectAddr = programLoadAddr;
         for (List<String> program : programs) {
 
             Symbol headerSymbol = new Symbol();
@@ -59,16 +59,16 @@ public class Loader {
                         loaderInfo.programName = csectName;
 
                     int relativeStartAddr = Integer.parseInt(record.substring(7, 13), 16);
-                    csectStartAddr += relativeStartAddr;
+                    csectAddr += relativeStartAddr;
 
                     int csectLength = Integer.parseInt(record.substring(13, 19), 16);
 
                     headerSymbol.setCsectName(csectName);
                     headerSymbol.setLength(csectLength);
-                    headerSymbol.setAddress(csectStartAddr);
+                    headerSymbol.setAddress(csectAddr);
                     estab.addSymbol(headerSymbol);
                 } else if (record.startsWith("D")) {
-                    for (int i = 1; i < record.length() - 12; i += 12) {
+                    for (int i = 1; i <= record.length() - 12; i += 12) {
                         String symbolName = record.substring(i, i + 6).trim();
                         int symbolAddr = Integer.parseInt(record.substring(i + 6, i + 12).trim(), 16);
 
@@ -79,15 +79,19 @@ public class Loader {
                     }
                 } else if (record.startsWith("E")) {
                     if (record.length() >= 7)
-                        loaderInfo.programStartAddr = Integer.parseInt(record.substring(1, 8), 16) + programLoadAddr;
+                        loaderInfo.programStartAddr = Integer.parseInt(record.substring(1, 7), 16) + programLoadAddr;
                     if (headerSymbol.length.isPresent())
-                        csectStartAddr += headerSymbol.length.get();
+                        csectAddr += headerSymbol.length.get();
                 }
             }
         }
 
         // pass 2
         // 실제 메모리에 로드한 후 modification 레코드 반영
+        csectAddr = programLoadAddr;
+        for (List<String> program : programs) {
+            csectAddr += loadProgram(memory, program, csectAddr, estab);
+        }
 
         return loaderInfo;
     }
@@ -105,11 +109,36 @@ public class Loader {
             if (record.startsWith("H")) {
                 length = Integer.parseInt(record.substring(13, 19), 16);
             } else if (record.startsWith("T")) {
-                int startAddr = Integer.parseInt(record.substring(1, 7), 16) + programStartAddr;
+                int startAddrRelative = Integer.parseInt(record.substring(1, 7), 16);
                 int recordLen = Integer.parseInt(record.substring(7, 9), 16);
                 String text = record.substring(9, 9 + recordLen * 2);
-                memory.setMem(startAddr, text);
-            } else if (record.startsWith("E")) {
+                memory.setMemString(startAddrRelative + programStartAddr, text);
+            } else if (record.startsWith("M")) {
+                int startLocationRelative = Integer.parseInt(record.substring(1, 7), 16);
+                int startLocationAbsolute = startLocationRelative + programStartAddr;
+                int halfByteLen = Integer.parseInt(record.substring(7, 9), 16);
+                int memValue = memory.getMemValue(startLocationAbsolute, (halfByteLen + 1) / 2);
+                Optional<Symbol> targetSymbol = estab.searchByName(record.substring(10));
+
+                if (targetSymbol.isEmpty())
+                    throw new RuntimeException("Using not defined symbol. target : " + record.substring(10));
+
+                // 오버플로우 방지를 위한 마스크
+                int mask = 0;
+                for (int i = 0; i < halfByteLen; i++)
+                    mask |= 0xF << (i * 4);
+
+                if (record.charAt(9) == '+') {
+                    int rest = memValue & (0xFFFFFFFF - mask);
+                    memValue = rest + (((memValue & mask) + targetSymbol.get().address.get()) & mask);
+                } else if (record.charAt(9) == '-') {
+                    int rest = memValue & (0xFFFFFFFF - mask);
+                    memValue = rest + (((memValue & mask) - targetSymbol.get().address.get()) & mask);
+                } else
+                    throw new RuntimeException("Not valid modification operator : " + record.charAt(9));
+
+                // 계산 후 다시 메모리에 쓰기
+                memory.setMemValue(startLocationAbsolute, (halfByteLen + 1) / 2, memValue);
             }
         }
         return length;
@@ -118,18 +147,14 @@ public class Loader {
     private static class ExternalSymbolTable {
         private final List<Symbol> symbolList = new ArrayList<>();
 
-        Optional<Symbol> searchByCsectName(String csectName) {
+        // csect name이나 symbol name이 같은 심볼을 반환합니다.
+        // 존재하지 않으면 empty 반환
+        Optional<Symbol> searchByName(String name) {
             for (Symbol sym : symbolList) {
-                if (sym.controlSectionName.isPresent() && sym.controlSectionName.get().equals(csectName)) {
+                if (sym.symbolName.isPresent() && sym.symbolName.get().equals(name)) {
                     return Optional.of(sym);
                 }
-            }
-            return Optional.empty();
-        }
-
-        Optional<Symbol> searchBySymbolName(String symbolName) {
-            for (Symbol sym : symbolList) {
-                if (sym.symbolName.isPresent() && sym.symbolName.get().equals(symbolName)) {
+                if (sym.controlSectionName.isPresent() && sym.controlSectionName.get().equals(name)) {
                     return Optional.of(sym);
                 }
             }
@@ -178,6 +203,17 @@ public class Loader {
 
     // test
     public static void main(String[] args) throws IOException {
+//        relocation_loader_test();
+//        linking_loader_test();
+//        object_file_load_test();
+        String m = "000000B410B400B44077201FE3201B332FFADB2015A00433200957900000B8503B2FE9131000004F0000F1000000B41077100000E32012332FFA53900000DF2008B8503B2FEE4F000005";
+        for (int i = 0; i * 8 + 8 <= m.length(); i++) {
+            System.out.print(m.substring(i * 8, i * 8 + 8) + " ");
+            if (i % 4 == 3) System.out.println();
+        }
+    }
+
+    private static void relocation_loader_test() {
         List<String> absProgram = new ArrayList<>() {
             {
                 add("HCOPY  00000000107A");
@@ -191,9 +227,60 @@ public class Loader {
 
         Memory memory = new Memory();
         Loader loader = new Loader();
-        ExternalSymbolTable estab = new ExternalSymbolTable();
-        loader.loadProgram(memory, absProgram, 10, estab);
-//        loader.load(memory, "absolute.obj", 0);
+        loader.loadProgram(memory, absProgram, 10, new ExternalSymbolTable());
         System.out.println(memory.getMemString(10, Integer.parseInt("107A", 16) + 10));
+    }
+
+    private static void linking_loader_test() {
+        List<String> program1 = new ArrayList<>() {
+            {
+                add("HPROGA 000000000030");
+                add("DLISTA 000040ENDA  000054");
+                add("RLISTB ENDB  ");
+                add("M00000A05+LISTB");
+                add("M00000A05-ENDB");
+                add("M00002006+PROGA");
+                add("E000000");
+            }
+        };
+        List<String> program2 = new ArrayList<>() {
+            {
+                add("HPROGB 000000000030");
+                add("DLISTB 000060ENDB  000070");
+                add("RLISTA ENDA  ");
+                add("M00000505+LISTA");
+                add("M00000505-ENDA");
+                add("M00000A06+ENDA");
+                add("E");
+            }
+        };
+        List<List<String>> programs = new ArrayList<>() {
+            {
+                add(program1);
+                add(program2);
+            }
+        };
+
+        Memory memory = new Memory();
+        Loader loader = new Loader();
+        loader.loadAll(memory, programs, 0);
+
+        String mem = memory.getMemString(0, 100);
+        for (int i = 0; i * 8 + 8 <= mem.length(); i++) {
+            System.out.print(mem.substring(i * 8, i * 8 + 8) + " ");
+            if (i % 4 == 3) System.out.println();
+        }
+    }
+
+    private static void object_file_load_test() throws IOException {
+        Memory memory = new Memory();
+        Loader loader = new Loader();
+        loader.loadFromFile(memory, "obj.obj", 0);
+
+        String mem = memory.getMemString(0, 4400);
+        for (int i = 0; i * 8 + 8 <= mem.length(); i++) {
+            System.out.print(mem.substring(i * 8, i * 8 + 8) + " ");
+            if (i % 4 == 3) System.out.println();
+        }
     }
 }

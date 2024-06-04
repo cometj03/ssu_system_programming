@@ -29,7 +29,7 @@ public class Simulator {
     }
 
     public void load(String objFileName, int programStartAddr) throws IOException {
-        String programName = loader.loadFromFile(resource.getMemory(), objFileName, programStartAddr);
-        this.programName = Optional.ofNullable(programName);
+        Loader.LoaderInfo loaderInfo = loader.loadFromFile(resource.getMemory(), objFileName, programStartAddr);
+        this.programName = Optional.ofNullable(loaderInfo.programName);
     }
 }
