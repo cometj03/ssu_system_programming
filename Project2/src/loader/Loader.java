@@ -124,9 +124,8 @@ public class Loader {
                     throw new RuntimeException("Using not defined symbol. target : " + record.substring(10));
 
                 // 오버플로우 방지를 위한 마스크
-                int mask = 0;
-                for (int i = 0; i < halfByteLen; i++)
-                    mask |= 0xF << (i * 4);
+                // halfByteLen == 5이면 mask == 0xFFFFF
+                int mask = (1 << (halfByteLen * 4)) - 1;
 
                 if (record.charAt(9) == '+') {
                     int rest = memValue & (0xFFFFFFFF - mask);
@@ -205,12 +204,7 @@ public class Loader {
     public static void main(String[] args) throws IOException {
 //        relocation_loader_test();
 //        linking_loader_test();
-//        object_file_load_test();
-        String m = "000000B410B400B44077201FE3201B332FFADB2015A00433200957900000B8503B2FE9131000004F0000F1000000B41077100000E32012332FFA53900000DF2008B8503B2FEE4F000005";
-        for (int i = 0; i * 8 + 8 <= m.length(); i++) {
-            System.out.print(m.substring(i * 8, i * 8 + 8) + " ");
-            if (i % 4 == 3) System.out.println();
-        }
+        object_file_load_test();
     }
 
     private static void relocation_loader_test() {
