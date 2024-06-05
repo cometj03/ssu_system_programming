@@ -68,18 +68,17 @@ public class Simulator {
             case 3 -> {
                 int val = resource.getMemory().getMemValue(PC, 2);
 
-                String fullInst;
-                if ((val & (1 << 4)) != 0) {
-                    // extended
-                    fullInst = resource.getMemory().getMemString(PC, 4);
-                    PC += 4;
-                } else {
-                    fullInst = resource.getMemory().getMemString(PC, 3);
-                    PC += 3;
-                }
+                boolean extended = (val & 0x10) == 0x10;
+                String fullInst = resource.getMemory().getMemString(PC, extended ? 4 : 3);
+                PC += extended ? 4 : 3;
+
                 // 점프해야 하는 경우 해당 offset을 반환
-                int offset = executor.executeFormat3Inst(inst.get(), fullInst, PC, resource);
-                if (offset < 0) return null;
+                try {
+                    PC += executor.executeFormat3Inst(inst.get(), fullInst, PC, extended, resource);
+                } catch (RuntimeException e) {
+                    // 프로그램 종료시 예외 던짐
+                    return null;
+                }
             }
         }
         return inst.get().getName();
