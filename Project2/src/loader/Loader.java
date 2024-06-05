@@ -21,11 +21,11 @@ public class Loader {
     public static class LoaderInfo {
         public String programName = null;
         public int programStartAddr = 0;
+        public int programTotalLen = 0;
     }
 
-    public LoaderInfo loadFromFile(Memory memory, String objFileName, int programLoadAddr) throws IOException {
-        File file = new File(objFileName);
-        BufferedReader bufReader = new BufferedReader(new FileReader(file));
+    public LoaderInfo loadFromFile(Memory memory, File objFile, int programLoadAddr) throws IOException {
+        BufferedReader bufReader = new BufferedReader(new FileReader(objFile));
         List<List<String>> programs = new ArrayList<>();
 
         String line;
@@ -92,6 +92,7 @@ public class Loader {
         for (List<String> program : programs) {
             csectAddr += loadProgram(memory, program, csectAddr, estab);
         }
+        loaderInfo.programTotalLen = csectAddr - programLoadAddr;
 
         return loaderInfo;
     }
@@ -269,7 +270,7 @@ public class Loader {
     private static void object_file_load_test() throws IOException {
         Memory memory = new Memory();
         Loader loader = new Loader();
-        loader.loadFromFile(memory, "obj.obj", 0);
+        loader.loadFromFile(memory, new File("obj.obj"), 0);
 
         String mem = memory.getMemString(0, 4400);
         for (int i = 0; i * 8 + 8 <= mem.length(); i++) {

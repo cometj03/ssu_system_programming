@@ -12,7 +12,7 @@ import java.util.List;
  * - 레지스터 영역
  */
 public class ResourceManager {
-    private Memory memory;
+    private final Memory memory = new Memory();
     private final List<Register> registers = new ArrayList<>(10);
 
     public ResourceManager() {
@@ -24,7 +24,7 @@ public class ResourceManager {
         return this.memory;
     }
 
-    private Register getRegister(int reg) throws RuntimeException {
+    public Register getRegister(int reg) throws RuntimeException {
         return switch (reg) {
             case 0 -> registers.get(0);
             case 1 -> registers.get(1);

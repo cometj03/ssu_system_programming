@@ -1,3 +1,4 @@
+import loader.Loader;
 import simulator.Simulator;
 
 import javax.swing.*;
@@ -20,8 +21,6 @@ public class VisualSimulator extends JFrame {
             simulator.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         } catch (IOException e) {
             System.out.println("IOException : " + e.getMessage());
-        } catch (RuntimeException e) {
-            System.out.println("RuntimeException : " + e.getMessage());
         }
     }
 
@@ -34,22 +33,38 @@ public class VisualSimulator extends JFrame {
     private void uiInit() {
         this.setSize(500, 700);
         this.setContentPane(MainPanel);
-        this.setTitle("SIC/XE Visual simulator.Simulator");
+        this.setTitle("SIC/XE Visual Simulator");
 
+        exe1StepButton.setEnabled(false);
+        exeAllButton.setEnabled(false);
+        startAddrMemTF.setText("0");
         exitButton.addActionListener(e -> dispose());
+        exe1StepButton.addActionListener(e -> executeOneStep());
+        exeAllButton.addActionListener(e -> executeAll());
         openButton.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
-            fileChooser.addChoosableFileFilter(new FileNameExtensionFilter("object file", "obj"));
+            fileChooser.setFileFilter(new FileNameExtensionFilter("object file", "obj"));
             int returnVal = fileChooser.showOpenDialog(VisualSimulator.this);
 
             if (returnVal == JFileChooser.APPROVE_OPTION) {
-                System.out.println(fileChooser.getSelectedFile().getName());
+                try {
+                    int startAddr = Integer.parseInt(startAddrMemTF.getText(), 16);
+                    Loader.LoaderInfo loaderInfo = simulator.load(fileChooser.getSelectedFile(), startAddr);
+
+                    fileNameTF.setText(fileChooser.getSelectedFile().getAbsolutePath());
+                    exe1StepButton.setEnabled(true);
+                    exeAllButton.setEnabled(true);
+                    setHeaderBox(loaderInfo.programName, startAddr, loaderInfo.programTotalLen);
+                    setRegisterBox();
+                    setEndBox(loaderInfo.programStartAddr);
+                } catch (NumberFormatException | IOException ee) {
+                    System.out.println(ee.getMessage());
+                }
             }
         });
-        exe1StepButton.addActionListener(e -> executeOneStep());
-        exeAllButton.addActionListener(e -> executeAll());
     }
+
 
     void executeOneStep() {
 
@@ -59,10 +74,33 @@ public class VisualSimulator extends JFrame {
 
     }
 
+    private void setHeaderBox(String programName, int startAddr, int len) {
+        progNameTF.setText(programName);
+        progStartAddrTF.setText(String.format("%06X", startAddr));
+        progLenTF.setText(String.format("%06X", len));
+    }
+
+    private void setRegisterBox() {
+        for (int i = 0; i < 10; i++) {
+            if (i == 7) continue;
+            int value = simulator.getRegister(i).getValue();
+            if (regDecTFs[i] != null) {
+                regDecTFs[i].setText(String.format("%d", value));
+            }
+            if (regHexTFs[i] != null) {
+                regHexTFs[i].setText(String.format("%X", value));
+            }
+        }
+    }
+
+    private void setEndBox(int firstInstAddr) {
+        firstInstAddrTF.setText(String.format("%06X", firstInstAddr));
+    }
+
 
     /* ui 관련 필드 */
     private JPanel MainPanel;
-    private JTextField tfFileName;
+    private JTextField fileNameTF;
     private JTextField progNameTF;
     private JTextField progStartAddrTF;
     private JTextField progLenTF;
@@ -91,4 +129,29 @@ public class VisualSimulator extends JFrame {
     private JButton exe1StepButton;
     private JButton exeAllButton;
     private JButton exitButton;
+
+    private final JTextField[] regDecTFs = {
+            regDecTF0,
+            regDecTF1,
+            regDecTF2,
+            regDecTF3,
+            regDecTF4,
+            regDecTF5,
+            null,
+            null,
+            regDecTF8,
+            null
+    };
+    private final JTextField[] regHexTFs = {
+            regHexTF0,
+            regHexTF1,
+            regHexTF2,
+            regHexTF3,
+            regHexTF4,
+            regHexTF5,
+            regHexTF6,
+            null,
+            regHexTF8,
+            regHexTF9,
+    };
 }

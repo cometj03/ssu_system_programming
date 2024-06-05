@@ -31,15 +31,12 @@ public class Memory {
         for (int i = 0; i < bytes; i++) {
             ret |= (mem[i + startAddr] & 0xFF) << (8 * (bytes - i - 1));
         }
-        if (bytes == 3 && (mem[startAddr] & 0x80) != 0) {
-            // 1 word의 값의 최상위 바이트가 1인 경우 음수라고 판단
-            ret += 0xFF000000;
-        }
         return ret;
     }
 
     public void setMemString(int startAddr, String value) {
-        if (value.length() % 2 != 0) throw new RuntimeException("setMem");
+        if (value.length() % 2 != 0)
+            throw new RuntimeException("setMem");
 
         for (int i = 0; i < value.length() / 2; i++) {
             mem[i + startAddr] = Integer.parseInt(value.substring(i * 2, i * 2 + 2), 16);
@@ -78,6 +75,6 @@ public class Memory {
 
         mem.setMemValue(16, 3, -16);
         negVal = mem.getMemValue(16, 3);
-        System.out.println(negVal); // -16
+        System.out.println(negVal); // 0xFFFFFFF0 == 16777200
     }
 }
