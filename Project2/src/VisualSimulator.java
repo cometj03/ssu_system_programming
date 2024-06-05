@@ -31,7 +31,7 @@ public class VisualSimulator extends JFrame {
     }
 
     private void uiInit() {
-        this.setSize(500, 700);
+        this.setSize(500, 750);
         this.setContentPane(MainPanel);
         this.setTitle("SIC/XE Visual Simulator");
 
@@ -55,9 +55,10 @@ public class VisualSimulator extends JFrame {
                     fileNameTF.setText(fileChooser.getSelectedFile().getAbsolutePath());
                     exe1StepButton.setEnabled(true);
                     exeAllButton.setEnabled(true);
-                    setHeaderBox(loaderInfo.programName, startAddr, loaderInfo.programTotalLen);
-                    setRegisterBox();
-                    setEndBox(loaderInfo.programStartAddr);
+                    updateHeaderBox(loaderInfo.programName, startAddr, loaderInfo.programTotalLen);
+                    updateRegisterBox();
+                    updateEndBox(loaderInfo.programStartAddr);
+                    updateMemoryDump();
                 } catch (NumberFormatException | IOException ee) {
                     System.out.println(ee.getMessage());
                 }
@@ -74,13 +75,13 @@ public class VisualSimulator extends JFrame {
 
     }
 
-    private void setHeaderBox(String programName, int startAddr, int len) {
+    private void updateHeaderBox(String programName, int startAddr, int len) {
         progNameTF.setText(programName);
         progStartAddrTF.setText(String.format("%06X", startAddr));
         progLenTF.setText(String.format("%06X", len));
     }
 
-    private void setRegisterBox() {
+    private void updateRegisterBox() {
         for (int i = 0; i < 10; i++) {
             if (i == 7) continue;
             int value = simulator.getRegister(i).getValue();
@@ -93,8 +94,18 @@ public class VisualSimulator extends JFrame {
         }
     }
 
-    private void setEndBox(int firstInstAddr) {
+    private void updateEndBox(int firstInstAddr) {
         firstInstAddrTF.setText(String.format("%06X", firstInstAddr));
+    }
+
+    private void updateMemoryDump() {
+        String mem = simulator.getMemory().getMemString(0, 4400);
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i * 8 + 8 <= mem.length(); i++) {
+            builder.append(mem, i * 8, i * 8 + 8).append(" ");
+            if (i % 8 == 7) builder.append("\n");
+        }
+        memoryTextArea.setText(builder.toString());
     }
 
 
@@ -123,12 +134,13 @@ public class VisualSimulator extends JFrame {
     private JTextField regHexTF9;
     private JTextField startAddrMemTF;
     private JTextField targetAddressTF;
-    private JTextField instructionsTF;
     private JTextField deviceTF;
     private JButton openButton;
     private JButton exe1StepButton;
     private JButton exeAllButton;
     private JButton exitButton;
+    private JTextArea memoryTextArea;
+    private JTextArea instructionsTextArea;
 
     private final JTextField[] regDecTFs = {
             regDecTF0,

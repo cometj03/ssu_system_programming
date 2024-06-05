@@ -41,7 +41,9 @@ public class ResourceManager {
 
     // test
     public static void main(String[] args) {
-        int a = new ResourceManager().registers.get(1).getValue();
-        System.out.println(a);
+        ResourceManager resource = new ResourceManager();
+        resource.getRegister(0).setValue(10);
+        resource.getRegister(0).add(32);
+        System.out.println(resource.getRegister(0).getValue()); // 42
     }
 }
