@@ -55,10 +55,11 @@ public class VisualSimulator extends JFrame {
                     fileNameTF.setText(fileChooser.getSelectedFile().getAbsolutePath());
                     exe1StepButton.setEnabled(true);
                     exeAllButton.setEnabled(true);
-                    updateHeaderBox(loaderInfo.programName, startAddr, loaderInfo.programTotalLen);
+                    setHeaderBox(loaderInfo.programName, startAddr, loaderInfo.programTotalLen);
                     updateRegisterBox();
-                    updateEndBox(loaderInfo.programStartAddr);
+                    setEndBox(loaderInfo.programStartAddr);
                     updateMemoryDump();
+                    updatePC();
                 } catch (NumberFormatException | IOException ee) {
                     System.out.println(ee.getMessage());
                 }
@@ -68,17 +69,38 @@ public class VisualSimulator extends JFrame {
 
 
     void executeOneStep() {
-
+        String instruction = simulator.executeSingleInst();
+        if (instruction == null) {
+            exe1StepButton.setEnabled(false);
+            exeAllButton.setEnabled(false);
+        } else {
+            instructionsTextArea.append(instruction + "\n");
+        }
+        updateRegisterBox();
+        updateMemoryDump();
+        updatePC();
     }
 
     void executeAll() {
-
+        String instruction;
+        while ((instruction = simulator.executeSingleInst()) != null) {
+            instructionsTextArea.append(instruction + "\n");
+            updateRegisterBox();
+            updateMemoryDump();
+            updatePC();
+        }
+        exe1StepButton.setEnabled(false);
+        exeAllButton.setEnabled(false);
     }
 
-    private void updateHeaderBox(String programName, int startAddr, int len) {
+    private void setHeaderBox(String programName, int startAddr, int len) {
         progNameTF.setText(programName);
         progStartAddrTF.setText(String.format("%06X", startAddr));
         progLenTF.setText(String.format("%06X", len));
+    }
+
+    private void setEndBox(int firstInstAddr) {
+        firstInstAddrTF.setText(String.format("%06X", firstInstAddr));
     }
 
     private void updateRegisterBox() {
@@ -94,10 +116,6 @@ public class VisualSimulator extends JFrame {
         }
     }
 
-    private void updateEndBox(int firstInstAddr) {
-        firstInstAddrTF.setText(String.format("%06X", firstInstAddr));
-    }
-
     private void updateMemoryDump() {
         String mem = simulator.getMemory().getMemString(0, 4400);
         StringBuilder builder = new StringBuilder();
@@ -106,6 +124,10 @@ public class VisualSimulator extends JFrame {
             if (i % 8 == 7) builder.append("\n");
         }
         memoryTextArea.setText(builder.toString());
+    }
+
+    private void updatePC() {
+        programcounterTF.setText(String.format("%X", simulator.PC));
     }
 
 
@@ -133,7 +155,7 @@ public class VisualSimulator extends JFrame {
     private JTextField regHexTF8;
     private JTextField regHexTF9;
     private JTextField startAddrMemTF;
-    private JTextField targetAddressTF;
+    private JTextField programcounterTF;
     private JTextField deviceTF;
     private JButton openButton;
     private JButton exe1StepButton;
