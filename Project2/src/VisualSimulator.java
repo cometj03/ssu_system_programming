@@ -127,7 +127,7 @@ public class VisualSimulator extends JFrame {
     }
 
     private void updatePC() {
-        programcounterTF.setText(String.format("%X", simulator.PC));
+        programcounterTF.setText(String.format("%X", simulator.getPC()));
     }
 
 
