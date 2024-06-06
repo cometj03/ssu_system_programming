@@ -26,7 +26,7 @@ public class Simulator {
     public Simulator() throws IOException {
         this.resource = new ResourceManager();
         this.loader = new Loader();
-        this.executor = new InstructionExecutor();
+        this.executor = new InstructionExecutor("output.txt", "input.txt");
         this.instructionTable = new InstructionTable("inst_table.txt");
     }
 
@@ -89,6 +89,8 @@ public class Simulator {
                 } catch (InstructionExecutor.ProgramEndException e) {
                     // 프로그램 종료시 예외 던짐
                     return null;
+                } catch (IOException ioe) {
+                    System.out.println("IOException at " + fullInst + " : \n" + ioe.getMessage());
                 }
             }
         }

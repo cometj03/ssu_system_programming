@@ -4,12 +4,25 @@ import resource.Memory;
 import resource.Register;
 import resource.ResourceManager;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
 /**
  * 명령어에 따라 수행할 동작을 정의한 모듈
  * ResourceManager의 상태를 적절히 변경함
  */
 public class InstructionExecutor {
     public static class ProgramEndException extends Exception {
+    }
+
+    private final FileOutputStream outputDevice;
+    private final FileInputStream inputDevice;
+
+    public InstructionExecutor(String outputFileName, String inputFileName) throws FileNotFoundException {
+        this.outputDevice = new FileOutputStream(outputFileName);
+        this.inputDevice = new FileInputStream(inputFileName);
     }
 
     public void executeFormat2Inst(Instruction inst, String fullInst, ResourceManager resource) {
@@ -71,12 +84,11 @@ public class InstructionExecutor {
                 resource.getRegister(1).setValue(xReg + 1);
 
                 Register r1 = resource.getRegister(n1);
-                Register r2 = resource.getRegister(n2);
                 Register sw = resource.getRegister(9);
                 // > == < 순서
-                if (r1.getValue() == r2.getValue())
+                if (xReg == r1.getValue())
                     sw.setValue(0x010);
-                else if (r1.getValue() > r2.getValue())
+                else if (xReg > r1.getValue())
                     sw.setValue(0x100);
                 else
                     sw.setValue(0x001);
@@ -90,7 +102,7 @@ public class InstructionExecutor {
      * @throws RuntimeException 프로그램이 종료될 경우(J @RETADR)
      */
     public int executeFormat3Inst(Instruction inst, String fullInst, int PC, boolean extended,
-                                  ResourceManager resource) throws ProgramEndException {
+                                  ResourceManager resource) throws ProgramEndException, IOException {
         boolean direct = false, immediate = false, indirect = false;
         boolean x = false;
 
@@ -151,7 +163,7 @@ public class InstructionExecutor {
             case "STCH" -> {
                 int regValue = resource.getRegister(0).getValue();
                 int xReg = resource.getRegister(1).getValue();
-                resource.getMemory().setMemValue(addr + (x ? xReg : 0), 3, regValue);
+                resource.getMemory().setMemValue(addr + (x ? xReg : 0), 1, regValue);
             }
             case "COMP" -> {
                 int aReg = resource.getRegister(0).getValue();
@@ -195,18 +207,25 @@ public class InstructionExecutor {
                 resource.getRegister(9).setValue(0);
             }
             case "RD" -> {
-                int device = resource.getMemory().getMemValue(addr, 3);
+                int device = resource.getMemory().getMemValue(addr, 1);
                 if (device == 0xF1) {
                     // input device
-                    // 1바이트를 ASCII로 변환해서 입력한다
-                    System.out.println("input");
+                    // 1바이트를 읽어서 ASCII로 변환해서 A 레지스터에 입력한다
+                    int input = inputDevice.read();
+                    if (input == -1) // EOF
+                        input = 0;
+                    resource.getRegister(0).setValue(input & 0xFF);
+                    System.out.printf("input : %c\n", (char) input);
                 }
             }
             case "WD" -> {
-                int device = resource.getMemory().getMemValue(addr, 3);
+                int device = resource.getMemory().getMemValue(addr, 1);
                 if (device == 0x05) {
                     // output device
-                    System.out.println("output");
+                    // A 레지스터의 하위 1바이트를 ASCII로 변환해서 output device에 쓴다
+                    int aReg = resource.getRegister(0).getValue() & 0xFF;
+                    System.out.printf("output : %c\n", (char) aReg);
+                    outputDevice.write(aReg);
                 }
             }
             default -> throw new RuntimeException("Not implemented instruction : " + inst.getName());
