@@ -23,10 +23,10 @@ public class Simulator {
     private final InstructionExecutor executor;
     private final InstructionTable instructionTable;
 
-    public Simulator() throws IOException {
+    public Simulator(String inputFileName, String outputFileName) throws IOException {
         this.resource = new ResourceManager();
         this.loader = new Loader();
-        this.executor = new InstructionExecutor("output.txt", "input.txt");
+        this.executor = new InstructionExecutor(inputFileName, outputFileName);
         this.instructionTable = new InstructionTable("inst_table.txt");
     }
 

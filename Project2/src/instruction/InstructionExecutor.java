@@ -17,12 +17,12 @@ public class InstructionExecutor {
     public static class ProgramEndException extends Exception {
     }
 
-    private final FileOutputStream outputDevice;
     private final FileInputStream inputDevice;
+    private final FileOutputStream outputDevice;
 
-    public InstructionExecutor(String outputFileName, String inputFileName) throws FileNotFoundException {
-        this.outputDevice = new FileOutputStream(outputFileName);
+    public InstructionExecutor(String inputFileName, String outputFileName) throws FileNotFoundException {
         this.inputDevice = new FileInputStream(inputFileName);
+        this.outputDevice = new FileOutputStream(outputFileName);
     }
 
     public void executeFormat2Inst(Instruction inst, String fullInst, ResourceManager resource) {
@@ -98,7 +98,7 @@ public class InstructionExecutor {
     }
 
     /**
-     * @return 점프해야 하는 지점까지의 offset 반환. 점프할 필요 없다면 0 반환
+     * @return 새로운 PC 값. 점프할 필요가 없다면 현재 PC값을 반환
      * @throws RuntimeException 프로그램이 종료될 경우(J @RETADR)
      */
     public int executeFormat3Inst(Instruction inst, String fullInst, int PC, boolean extended,

@@ -26,7 +26,7 @@ public class VisualSimulator extends JFrame {
 
     public VisualSimulator() throws IOException {
         super();
-        this.simulator = new Simulator();
+        this.simulator = new Simulator("input.txt", "output.txt");
         uiInit();
     }
 
