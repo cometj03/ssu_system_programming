@@ -220,13 +220,13 @@ public class InstructionExecutor {
             }
             case "WD" -> {
                 int device = resource.getMemory().getMemValue(addr, 1);
-                if (device == 0x05) {
-                    // output device
-                    // A 레지스터의 하위 1바이트를 ASCII로 변환해서 output device에 쓴다
-                    int aReg = resource.getRegister(0).getValue() & 0xFF;
-                    System.out.printf("output : %c\n", (char) aReg);
-                    outputDevice.write(aReg);
-                }
+//                if (device == 0x05) {
+                // output device
+                // A 레지스터의 하위 1바이트를 ASCII로 변환해서 output device에 쓴다
+                int aReg = resource.getRegister(0).getValue() & 0xFF;
+                System.out.printf("output : %c\n", (char) aReg);
+                outputDevice.write(aReg);
+//                }
             }
             default -> throw new RuntimeException("Not implemented instruction : " + inst.getName());
         }

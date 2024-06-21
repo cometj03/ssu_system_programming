@@ -53,17 +53,21 @@ public class ControlSection {
         }
     }
 
+    private final ObjectCode objCode = new ObjectCode();
+
     private InstructionToken handlePass1Instruction(
             StringToken stringToken,
             Instruction instruction) throws RuntimeException {
         List<String> operands = new ArrayList<>();
         int size = instruction.getFormat();
         boolean nBit, iBit, xBit, pBit, eBit;
-        nBit = iBit = xBit = pBit = eBit = false;
+        nBit = iBit = pBit = true;
+        xBit = eBit = false;
 
         if (stringToken.getOperator().get().startsWith("+")) {
             ++size;
             eBit = true;
+            pBit = false;
         }
 
         if (stringToken.getLabel().isPresent()) {
@@ -86,22 +90,60 @@ public class ControlSection {
             }
             if (opnd.startsWith("#")) {
                 iBit = true;
+                nBit = false;
+                pBit = false;
                 continue;
             }
             if (opnd.startsWith("@")) {
+                iBit = false;
                 nBit = true;
                 continue;
             }
 
             Optional<Symbol> sym = symbolTable.searchSymbol(opnd);
-            if (sym.isPresent() && !sym.get().isReference()) {
-                pBit = true;
+            if (sym.isPresent() && sym.get().isReference()) {
+//                pBit = true;
                 eBit = true;
             }
         }
 
-        return new InstructionToken(instruction, operands,
+        System.out.println("Inst: " + instruction.getName() + " / " + instruction.getOpcode());
+
+        InstructionToken instructionToken = new InstructionToken(instruction, operands,
                 nBit, iBit, xBit, pBit, eBit, stringToken.getTokenString(), locctr, size);
+
+        System.out.println("Test: " + instruction.getName() + " / " + instructionToken.getNixbpe());
+
+        return instructionToken;
+    }
+
+    /**
+     * pass2 작업을 수행한다. pass1에서 초기화한 토큰 테이블, 심볼 테이블 및 리터럴 테이블을 통해 오브젝트 코드를 생성한다.
+     *
+     * @return 해당 control section에 해당하는 오브젝트 코드 객체
+     * @throws RuntimeException 소스 코드 컴파일 오류
+     */
+    public ObjectCode buildObjectCode() throws RuntimeException {
+        for (Token token : tokens) {
+            if (token instanceof InstructionToken) {
+                handlePass2Instruction(objCode, (InstructionToken) token);
+            } else if (token instanceof DirectiveToken) {
+                if (((DirectiveToken) token).getDirectiveType() == Directive.END) {
+                    objCode.setProgramLength(token.getAddress());
+                }
+                if (token instanceof ValueDirectiveToken) {
+                    List<Numeric> numerics = ((ValueDirectiveToken) token).getNumerics();
+                    String value = numerics.stream()
+                            .map(numeric -> numeric.packValue())
+                            .collect(Collectors.joining());
+                    objCode.addText(token.getAddress(), value);
+                } else {
+                    handlePass2Directive(objCode, (DirectiveToken) token);
+                }
+            } else
+                throw new RuntimeException("invalid operation");
+        }
+        return objCode;
     }
 
     private DirectiveToken handlePass1Directive(StringToken stringToken) throws RuntimeException {
@@ -158,7 +200,22 @@ public class ControlSection {
                 } else {
                     // 그렇지 않은 경우 (ex: BUFEND-BUFFER)
                     numeric = new Numeric(0);
-                    // TODO : modification 설정해주기
+
+                    // modification 설정해주기
+                    String[] terms = operand.split("[-+]");
+                    char[] ops = new char[terms.length];
+                    for (int i = 0, t = 1; i < operand.length(); i++) {
+                        if (operand.charAt(i) == '-' || operand.charAt(i) == '+') {
+                            ops[t] = operand.charAt(i);
+                            t++;
+                        }
+                    }
+
+                    for (int t = 0; t < terms.length; t++) {
+                        boolean isPlus = ops[t] != '-';
+                        int sizeHalfBytes = directive == Directive.WORD ? 6 : 2;
+                        objCode.addModification(terms[t], isPlus, locctr, sizeHalfBytes);
+                    }
                 }
 
                 return new ValueDirectiveToken(directive, numeric, tokenString, locctr, numeric.getSize());
@@ -177,7 +234,7 @@ public class ControlSection {
             case EQU -> {
                 if (stringToken.getOperands().isEmpty())
                     throw new RuntimeException("EQU with no operand.");
-                ;
+
                 String expression = stringToken.getOperands().get(0);
                 symbolTable.putLabel(label.get(), locctr, expression);
                 // pass 2에서는 사용되지 않음
@@ -194,48 +251,6 @@ public class ControlSection {
             }
         }
         throw new RuntimeException("Unknown directive : \n" + tokenString);
-    }
-
-    /**
-     * pass2 작업을 수행한다. pass1에서 초기화한 토큰 테이블, 심볼 테이블 및 리터럴 테이블을 통해 오브젝트 코드를 생성한다.
-     *
-     * @return 해당 control section에 해당하는 오브젝트 코드 객체
-     * @throws RuntimeException 소스 코드 컴파일 오류
-     */
-    public ObjectCode buildObjectCode() throws RuntimeException {
-        ObjectCode objCode = new ObjectCode();
-
-        for (Token token : tokens) {
-            if (token instanceof InstructionToken) {
-                handlePass2Instruction(objCode, (InstructionToken) token);
-            } else if (token instanceof DirectiveToken) {
-                if (((DirectiveToken) token).getDirectiveType() == Directive.END) {
-                    objCode.setProgramLength(token.getAddress());
-                }
-                if (token instanceof ValueDirectiveToken) {
-                    List<Numeric> numerics = ((ValueDirectiveToken) token).getNumerics();
-                    String value = numerics.stream()
-                            .map(numeric -> numeric.packValue())
-                            .collect(Collectors.joining());
-                    objCode.addText(token.getAddress(), value);
-                } else {
-                    handlePass2Directive(objCode, (DirectiveToken) token);
-                }
-            } else
-                throw new RuntimeException("invalid operation");
-        }
-        return objCode;
-    }
-
-    /**
-     * @param objCode
-     * @param token
-     */
-    private void handlePass2Instruction(ObjectCode objCode, InstructionToken token) {
-        InstructionToken.TextInfo textInfo = token.getTextInfo(symbolTable, literalTable);
-        objCode.addText(token.getAddress(), textInfo.generateText());
-
-        // todo modification
     }
 
     private void handlePass2Directive(ObjectCode objCode, DirectiveToken token) throws RuntimeException {
@@ -297,6 +312,23 @@ public class ControlSection {
      */
     public String getLiteralString() {
         return literalTable.toString();
+    }
+
+    /**
+     * @param objCode
+     * @param token
+     */
+    private void handlePass2Instruction(ObjectCode objCode, InstructionToken token) {
+        InstructionToken.TextInfo textInfo = token.getTextInfo(symbolTable, literalTable);
+        objCode.addText(token.getAddress(), textInfo.generateText());
+
+        // add modification
+        for (String op : token.getOperands()) {
+            Optional<Symbol> sym = symbolTable.searchSymbol(op);
+            if (sym.isPresent() && sym.get().isReference()) {
+                objCode.addModification(op, true, token.getAddress() + 1, 5);
+            }
+        }
     }
 
     private InstructionTable instTable;

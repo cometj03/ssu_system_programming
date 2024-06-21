@@ -19,7 +19,7 @@ public class Assembler {
     public static void main(String[] args) {
         try {
             Assembler assembler = new Assembler("inst_table.txt");
-            ArrayList<String> input = assembler.readInputFromFile("input.txt");
+            ArrayList<String> input = assembler.readInputFromFile("input2.txt");
             ArrayList<ArrayList<String>> dividedInput = assembler.divideInput(input);
             dividedInput.size();
 
@@ -34,8 +34,8 @@ public class Assembler {
                     .map(x -> x.getLiteralString())
                     .collect(Collectors.joining("\n\n"));
 
-            assembler.writeStringToFile("output_symtab.txt", symbolsString);
-            assembler.writeStringToFile("output_littab.txt", literalsString);
+            assembler.writeStringToFile("output_symtab2.txt", symbolsString);
+            assembler.writeStringToFile("output_littab2.txt", literalsString);
 
             ArrayList<ObjectCode> objectCodes = (ArrayList<ObjectCode>) controlSections.stream()
                     .map(x -> assembler.pass2(x))
@@ -45,7 +45,7 @@ public class Assembler {
                     .map(x -> x.toString())
                     .collect(Collectors.joining("\n\n"));
 
-            assembler.writeStringToFile("output_objectcode.txt", objectCodesString);
+            assembler.writeStringToFile("output_objectcode2.txt", objectCodesString);
         } catch (Exception e) {
             System.out.println("Error : " + e.getMessage());
         }

@@ -40,15 +40,27 @@ public class SymbolTable {
             putLabel(label, locctr);
             return;
         }
+
+        // expression 계산
         String[] terms = expression.split("[-+]");
         char[] ops = new char[terms.length];
-        for (int i = 0, t = 0; i < expression.length(); i++) {
+        for (int i = 0, t = 1; i < expression.length(); i++) {
             if (expression.charAt(i) == '-' || expression.charAt(i) == '+') {
                 ops[t] = expression.charAt(i);
                 t++;
             }
         }
-        // TODO
+        int value = 0;
+        for (int t = 0; t < terms.length; t++) {
+            Optional<Symbol> sym = searchSymbol(terms[t]);
+            if (sym.isEmpty()) throw new RuntimeException("symbol " + terms[t] + " is not exist.");
+            if (ops[t] == '-') {
+                value -= sym.get().getAddress();
+            } else {
+                value += sym.get().getAddress();
+            }
+        }
+        putLabel(label, value);
     }
 
     /**

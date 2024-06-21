@@ -24,16 +24,16 @@ public class ObjectCode {
 
         String header = String.format("H%-6s%06X%06X\n", sectionName.get(), startAddress.get(), programLength.get());
 
-        String define = this.defines.isEmpty() ? "" : "D" + this.defines.stream()
-                .map(d -> String.format("%-6s%06X", d.symbolName, d.address))
-                .collect(Collectors.joining()) + "\n";
-
         String refer = this.refers.isEmpty() ? "" : "R" + this.refers.stream()
                 .map(r -> String.format("%-6s", r))
                 .collect(Collectors.joining()) + "\n";
 
+        String define = this.defines.isEmpty() ? "" : "D" + this.defines.stream()
+                .map(d -> String.format("%-6s%06X", d.symbolName, d.address))
+                .collect(Collectors.joining()) + "\n";
+
         String text = this.texts.stream()
-                .map(t -> String.format("T%06X%06X%s\n", t.startAddress, t.length, t.getTextContent()))
+                .map(t -> String.format("T%06X%02X%s\n", t.startAddress, t.getLength() / 2, t.getTextContent()))
                 .collect(Collectors.joining());
 
         String modification = this.modifications.stream()

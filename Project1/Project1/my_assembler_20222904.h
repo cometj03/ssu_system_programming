@@ -46,7 +46,9 @@ typedef struct _token {
     char *comment; /** comment를 가리키는 포인터 */
     char nixbpe;   /** 특수 bit 정보 */
     /** 필드 추가 */
+    int operand_cnt; // operand 개수
     int addr;
+    int type; // 토큰 타입 (0: instruction, 1: directive)
 } token;
 
 /**

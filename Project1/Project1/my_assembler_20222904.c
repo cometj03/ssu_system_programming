@@ -11,7 +11,7 @@
  * 기입한다.
  */
 #define _CRT_SECURE_NO_WARNINGS
-//#define DEBUG
+#define DEBUG
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,19 +87,6 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /** 프로젝트1에서는 불필요함 */
-    /*
-    if ((err = make_opcode_output("output_opcode.txt", (const token **)tokens,
-                                  tokens_length, (const inst **)inst_table,
-                                  inst_table_length)) < 0) {
-        fprintf(stderr,
-                "make_opcode_output: opcode 파일 출력 과정에서 실패했습니다. "
-                "(error_code: %d)\n",
-                err);
-        return -1;
-    }
-    */
-
     if ((err = make_symbol_table_output("output_symtab.txt",
                                         (const symbol **)symbol_table,
                                         symbol_table_length)) < 0) {
@@ -120,7 +107,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if ((err = assem_pass2((const token **)tokens, tokens_length,
+    /*if ((err = assem_pass2((const token **)tokens, tokens_length,
                            (const inst **)inst_table, inst_table_length,
                            (const symbol **)symbol_table, symbol_table_length,
                            (const literal **)literal_table,
@@ -138,7 +125,7 @@ int main(int argc, char **argv) {
                 "실패했습니다. (error_code: %d)\n",
                 err);
         return -1;
-    }
+    }*/
 
     return 0;
 }
@@ -253,7 +240,7 @@ static int check_symbol_valid(const char* label, const char* csect_name, int lin
 /**
  * symbol 인스턴스를 생성하여 symbol_table의 마지막에 삽입합니다.
  */
-static int insert_label_into_symtbl(const char* label, int addr, const char* csect_name,
+static int insert_label_into_symtab(const char* label, int addr, const char* csect_name,
                                     symbol* symbol_table[], int* symbol_table_length) {
     if (label == NULL) return -1;
 
@@ -279,7 +266,7 @@ static int insert_label_into_symtbl(const char* label, int addr, const char* cse
 /**
  * literal 인스턴스를 생성하여 literal_table의 마지막에 삽입합니다.
  */
-static int insert_literal_into_littbl(const char* literal_str, literal* literal_table[], int* literal_table_length) {
+static int insert_literal_into_littab(const char* literal_str, literal* literal_table[], int* literal_table_length) {
     if (literal_str == NULL) return -1;
 
     // 중복되는 리터럴은 삽입할 필요 없음
@@ -517,30 +504,31 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
         ++(*tokens_length);
 
         int dir = directive(tok->operator);
+        tok->type = dir == -1 ? 0 : 1; // 토큰 타입 설정
         if (dir == DIR_END) break;
 
         /// [symbol 처리]
         if (tok->label != NULL) {
             if ((err = check_symbol_valid(tok->label, csect_name, i + 1, symbol_table, symbol_table_length)) < 0) return err;
 
-            if (dir == DIR_EQU && tok->operand[0] != NULL) {
-                int addr;
-                // 수식 계산 후 addr에 넣어준다
-                if (calculate_equ(tok->operand[0], &addr, locctr, symbol_table, *symbol_table_length) < 0) return -5;
-                if ((err = insert_label_into_symtbl(tok->label, addr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
-                // EQU이면 더 이상 할 일 없음. 다음 라인으로 넘어가도 된다
-                continue;
-            }
-            else if (dir != DIR_START && dir != DIR_CSECT) {
-                // START이거나 CSECT는 아래에서 따로 처리해주기 때문에
+            //if (dir == DIR_EQU && tok->operand[0] != NULL) {
+            //    int addr;
+            //    // 수식 계산 후 addr에 넣어준다
+            //    if (calculate_equ(tok->operand[0], &addr, locctr, symbol_table, *symbol_table_length) < 0) return -5;
+            //    if ((err = insert_label_into_symtab(tok->label, addr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+            //    // EQU이면 더 이상 할 일 없음. 다음 라인으로 넘어가도 된다
+            //    continue;
+            //}
+            if (dir != DIR_START && dir != DIR_CSECT && dir != DIR_EQU) {
+                // START, CSECT, EQU는 아래에서 따로 처리해주기 때문에
                 // 여기서는 넣어주지 않는다
-                if ((err = insert_label_into_symtbl(tok->label, locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+                if ((err = insert_label_into_symtab(tok->label, locctr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
             }
         }
 
         /// [리터럴 삽입]
         if (tok->operand[0] != NULL && tok->operand[0][0] == '=') {
-            if ((err = insert_literal_into_littbl(tok->operand[0], literal_table, literal_table_length)) < 0) return err;
+            if ((err = insert_literal_into_littab(tok->operand[0], literal_table, literal_table_length)) < 0) return err;
         }
 
         /// [명령어 처리]
@@ -558,7 +546,7 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 if (tok->operand[0] != NULL) {
                     locctr = atoi(tok->operand[0]); // init
                     csect_name = tok->label;
-                    if ((err = insert_label_into_symtbl(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+                    if ((err = insert_label_into_symtab(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
                 }
                 break;
             case DIR_CSECT:
@@ -574,7 +562,22 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 tok->addr = 0;
                 locctr = 0;
                 csect_name = tok->label;
-                if ((err = insert_label_into_symtbl(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+                if ((err = insert_label_into_symtab(tok->label, locctr, NULL, symbol_table, symbol_table_length)) < 0) return err;
+                break;
+            case DIR_EQU:
+                if ((err = check_symbol_valid(tok->label, csect_name, i + 1, symbol_table, symbol_table_length)) < 0) return err;
+
+                if (tok->operand[0] != NULL) {
+                    int addr;
+                    // 수식 계산 후 addr에 넣어준다
+                    if (calculate_equ(tok->operand[0], &addr, locctr, symbol_table, *symbol_table_length) < 0) return -5;
+                    if ((err = insert_label_into_symtab(tok->label, addr, csect_name, symbol_table, symbol_table_length)) < 0) return err;
+                }
+                break;
+            case DIR_EXTREF:
+                for (int i = 0; i < tok->operand_cnt; i++) {
+                    if ((err = insert_label_into_symtab(tok->operand[i], locctr, "", symbol_table, symbol_table_length)) < 0) return err;
+                }
                 break;
             case DIR_LTORG:
                 // LTORG 토큰은 삭제하고 리터럴로 채우기
@@ -607,6 +610,15 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 }
                 break;
             }
+        }
+
+        switch (dir) {
+        case DIR_EQU:
+        case DIR_RESW:
+        case DIR_RESB:
+            // locctr만 올리고 아무것도 하지 않음
+            --(*tokens_length);
+            free(tokens[*tokens_length]);
         }
     } // end for
 
@@ -645,6 +657,7 @@ int token_parsing(const char *input, token *tok,
     for (int i = 0; i < MAX_OPERAND_PER_INST; i++)
         tok->operand[i] = NULL;
     tok->nixbpe = 0;
+    tok->operand_cnt = 0;
 
     char label[10] = { 0 }, opr[10] = { 0 }, opnd[100] = { 0 }, comment[100] = { 0 };
     
@@ -682,6 +695,7 @@ int token_parsing(const char *input, token *tok,
         ++opnd_cnt;
         st = end;
     }
+    tok->operand_cnt = opnd_cnt;
 
     // [nixbpe]
     int inst_idx = search_opcode(opr, inst_table, inst_table_length);
