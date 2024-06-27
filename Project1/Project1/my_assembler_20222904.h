@@ -48,6 +48,7 @@ typedef struct _token {
     /** 필드 추가 */
     int operand_cnt; // operand 개수
     int addr;
+    int size; // 차지하는 바이트 사이즈
     int type; // 토큰 타입 (0: instruction, 1: directive)
 } token;
 
@@ -63,8 +64,8 @@ typedef struct _symbol {
     char name[10]; /** 심볼의 이름 */
     int addr;      /** 심볼의 주소 */
     /* add fields if needed */
-    int rflag;      /** relative flag. relative address이면 1, 아니면 0 */
-    int csect_name[10]; /** 해당 symbol이 정의된 control section 이름. rflag == 0이면 정의되지 않음 */
+    int rflag;      /** relative flag. relative address이면 1, reference이면 2, 아니면 0 */
+    int csect_name[10]; /** 해당 symbol이 정의된 control section 이름. rflag == 1일 때에만 정의됨 */
 } symbol;
 
 /**
@@ -80,11 +81,12 @@ typedef struct _literal {
     char literal[20];   /** 리터럴의 표현식 */
     int addr;           /** 리터럴의 주소 */
     /* add fields if needed */
-    int bytes;          // 리터럴의 바이트 수
-    char type;          // 리터럴의 타입: ('N', 'C', 'X)
-    int val_num;        // 숫자 값
-    char* val_chars;    // 문자열
-    int val_hex;        // 16진수 값
+    int size;          // 리터럴의 바이트 수
+    int bytes[10];
+    // char type;          // 리터럴의 타입: ('N', 'C', 'X)
+    // int val_num;        // 숫자 값
+    // char* val_chars;    // 문자열
+    // int val_hex;        // 16진수 값
 } literal;
 
 /**
@@ -126,7 +128,7 @@ typedef struct _header_record {
 
 typedef struct _text_record {
     int start_addr;
-    int bytes_length;     // byte 수
+    int obj_length;     // half byte 수
     char obj[61];
 } text_record;
 

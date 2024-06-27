@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /*if ((err = assem_pass2((const token **)tokens, tokens_length,
+    if ((err = assem_pass2((const token **)tokens, tokens_length,
                            (const inst **)inst_table, inst_table_length,
                            (const symbol **)symbol_table, symbol_table_length,
                            (const literal **)literal_table,
@@ -125,9 +125,40 @@ int main(int argc, char **argv) {
                 "실패했습니다. (error_code: %d)\n",
                 err);
         return -1;
-    }*/
-
+    }
     return 0;
+}
+
+static int search_literal(const char* label, 
+                          const literal* literal_table[], int literal_table_length) {
+    for (int i = 0; i < literal_table_length; i++) {
+        if (strcmp(literal_table[i]->literal, label) == 0)
+            return i;
+    }
+    return -1;
+}
+
+static int search_symbol_by_label(const char* label, const char* csect_name,
+                                  const symbol* symbol_table[], int symbol_table_length) {
+    for (int i = 0; i < symbol_table_length; i++) {
+        if (strcmp(symbol_table[i]->name, label) == 0 &&
+            (csect_name == NULL || strcmp(symbol_table[i]->csect_name, csect_name) == 0))
+            return i;
+    }
+    return -1;
+}
+
+int get_reg_number(char r) {
+    switch (r) {
+    case 'A': return 0;
+    case 'X': return 1;
+    case 'L': return 2;
+    case 'B': return 3;
+    case 'S': return 4;
+    case 'T': return 5;
+    case 'R': return 6;
+    }
+    return -1;
 }
 
 /**
@@ -216,7 +247,7 @@ int init_input(char *input[], int *input_length, const char *input_dir) {
  * @return 오류: < 0, 정상 종료 == 0
  */
 static int check_symbol_valid(const char* label, const char* csect_name, int line_number,
-                              symbol* symbol_table[], int* symbol_table_length) {
+                              const symbol* symbol_table[], int* symbol_table_length) {
     if (label == NULL) return -1;
 
     if (strlen(label) > 6) {
@@ -251,7 +282,7 @@ static int insert_label_into_symtab(const char* label, int addr, const char* cse
     strcpy(sb->name, label);
     if (csect_name != NULL) {
         strcpy(sb->csect_name, csect_name);
-        sb->rflag = 1;
+        sb->rflag = strlen(csect_name) == 0 ? 2 : 1;
     }
     else {
         sb->csect_name[0] = '\0';
@@ -285,25 +316,36 @@ static int insert_literal_into_littab(const char* literal_str, literal* literal_
     case 'C':
         if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
             return -10; // wrong literal format
-        lit->bytes = lit_len - 4;
-        lit->type = 'C';
-        if ((lit->val_chars = (char*)malloc(lit->bytes + 1)) == NULL) return -2;
-        memcpy(lit->val_chars, lit->literal + 3, lit->bytes);
-        lit->val_chars[lit->bytes] = '\0';
+        lit->size = lit_len - 4;
+        for (int i = 0; i < lit->size; i++) {
+            lit->bytes[i] = lit->literal[i + 3] & 0xFF;
+        }
+
+        /*lit->type = 'C';
+        if ((lit->val_chars = (char*)malloc(lit->size + 1)) == NULL) return -2;
+        memcpy(lit->val_chars, lit->literal + 3, lit->size);
+        lit->val_chars[lit->size] = '\0';*/
         break;
     case 'X':
         if (lit->literal[2] != '\'' || lit->literal[lit_len - 1] != '\'')
             return -10; // wrong literal format
-        lit->bytes = (lit_len - 4 + 1) / 2;
-        lit->type = 'X';
+        lit->size = (lit_len - 4 + 1) / 2;
+
         char hex[10] = { 0 };
         memcpy(hex, lit->literal + 3, lit_len - 4);
-        lit->val_hex = (int)strtol(hex, NULL, 16);
+        lit->bytes[0] = (int)strtol(hex, NULL, 16);
+
+        /*lit->type = 'X';
+        lit->val_hex = (int)strtol(hex, NULL, 16);*/
         break;
     default:
-        lit->bytes = 3; // WORD
-        lit->type = 'N';
-        lit->val_num = atoi(lit->literal + 1);
+        lit->size = 3; // WORD
+        int value = atoi(lit->literal + 1);
+        for (int i = 0; i < 3; i++) {
+            lit->bytes[i] = (value >> (8 * (2 - i))) & 0xFF;
+        }
+        /*lit->type = 'N';
+        lit->val_num = atoi(lit->literal + 1);*/
         break;
     }
 
@@ -330,24 +372,27 @@ static int set_literal_addr(int* lit_last_idx, int* locctr,
 
     while (*lit_last_idx < *literal_table_length) {
         literal* lit = literal_table[*lit_last_idx];
-        lit->addr = *locctr;
-        *locctr += lit->bytes;
         ++(*lit_last_idx);
+        lit->addr = *locctr;
+        *locctr += lit->size;
 
         // 토큰으로 변환하여 토큰 테이블에도 대입
         token* lit_tok;
         if ((lit_tok = (token*)malloc(sizeof(token))) == NULL) return -2;
+        lit_tok->operator = NULL;
         lit_tok->comment = NULL;
         lit_tok->nixbpe = 0;
         for (int i = 0; i < MAX_OPERAND_PER_INST; i++)
             lit_tok->operand[i] = NULL;
+        lit_tok->size = lit->size;
+        lit_tok->type = 0;
 
         if ((lit_tok->label = (char*)malloc(2)) == NULL) return -2;
         if ((lit_tok->operator = (char*)malloc(strlen(lit->literal) + 1)) == NULL) return -2;
+        strcpy(lit_tok->operator, lit->literal);
         lit_tok->addr = lit->addr;
         lit_tok->label[0] = '*';
         lit_tok->label[1] = '\0';
-        strcpy(lit_tok->operator, lit->literal);
         tokens[*tokens_length] = lit_tok;
         ++(*tokens_length);
     }
@@ -422,14 +467,18 @@ static int calculate_equ(const char* expr, int* dest, int locctr,
         tok_buf[end - st] = '\0';
 
         // 토큰과 같은 symbol 찾기
-        sb = NULL;
+        int idx;
+        if ((idx = search_symbol_by_label(tok_buf, NULL, symbol_table, symbol_table_length)) == -1) return -2;
+        sb = symbol_table[idx];
+
+        /*sb = NULL;
         for (int i = 0; i < symbol_table_length; i++) {
             if (strcmp(symbol_table[i]->name, tok_buf) == 0) {
                 sb = symbol_table[i];
                 break;
             }
         }
-        if (sb == NULL) return -2;
+        if (sb == NULL) return -2;*/
 
         if (add_flag) *dest += sb->addr;
         else *dest -= sb->addr;
@@ -441,13 +490,14 @@ static int calculate_equ(const char* expr, int* dest, int locctr,
     return 0;
 }
 
-static int insert_dummy_token(token* tokens[], int* tokens_length, int addr) {
+static int insert_end_token(token* tokens[], int* tokens_length, int addr) {
     token* tok;
     if ((tok = (token*)malloc(sizeof(token))) == NULL) return -1;
     tok->addr = addr;
     tok->comment = NULL;
     tok->operand[0] = NULL;
-    tok->operator = NULL;
+    tok->operator = "END";
+    tok->type = 1;
     tok->label = NULL;
     tokens[*tokens_length] = tok;
     ++(*tokens_length);
@@ -505,7 +555,6 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
 
         int dir = directive(tok->operator);
         tok->type = dir == -1 ? 0 : 1; // 토큰 타입 설정
-        if (dir == DIR_END) break;
 
         /// [symbol 처리]
         if (tok->label != NULL) {
@@ -537,8 +586,11 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
             if (inst_idx == -1) return -4; // unknown operator
             inst* ins = inst_table[inst_idx];
 
-            locctr += inst_table[inst_idx]->format;
-            if (tok->operator[0] == '+') locctr++;
+            tok->size = inst_table[inst_idx]->format;
+            if (tok->operator[0] == '+') ++tok->size;
+
+            /*locctr += inst_table[inst_idx]->format;
+            if (tok->operator[0] == '+') locctr++;*/
         } 
         else {
             switch (dir) {
@@ -554,8 +606,9 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 --(*tokens_length);
                 if ((err = set_literal_addr(&lit_last_idx, &locctr,
                     tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
-                // 길이 계산 편의를 위해 넣어줍니다.
-                if (insert_dummy_token(tokens, tokens_length, locctr) < 0) return -1;
+                
+                // end 토큰 추가
+                 if (insert_end_token(tokens, tokens_length, locctr) < 0) return -1;
 
                 tokens[*tokens_length] = tok;
                 ++(*tokens_length);
@@ -586,25 +639,35 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
                 if ((err = set_literal_addr(&lit_last_idx, &locctr, 
                     tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
                 break;
+            case DIR_END:
+                // END 토큰은 삭제하고 리터럴로 채우기
+                --(*tokens_length);
+                free(tokens[*tokens_length]);
+                if ((err = set_literal_addr(&lit_last_idx, &locctr,
+                    tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
+
+                // end 토큰 추가
+                if (insert_end_token(tokens, tokens_length, locctr) < 0) return -1;
+                break;
             case DIR_RESW:
                 if (tok->operand[0] != NULL)
-                    locctr += atoi(tok->operand[0]) * 3;
+                    tok->size = atoi(tok->operand[0]) * 3;
                 break;
             case DIR_RESB:
                 if (tok->operand[0] != NULL)
-                    locctr += atoi(tok->operand[0]);
+                    tok->size = atoi(tok->operand[0]);
                 break;
             case DIR_WORD:
-                locctr += 3;
+                tok->size = 3;
                 break;
             case DIR_BYTE:
                 if (tok->operand[0] != NULL) {
                     switch (tok->operand[0][0]) {
                     case 'C':
-                        locctr += strlen(tok->operand[0]) - 3; // C, 따옴표 2개 총 3개 제외
+                        tok->size = strlen(tok->operand[0]) - 3; // C, 따옴표 2개 총 3개 제외
                         break;
                     case 'X':
-                        locctr += (strlen(tok->operand[0]) - 3 + 1) / 2; // X, 따옴표 2개 총 3개 제외 (두 문자 당 1byte)
+                        tok->size = (strlen(tok->operand[0]) - 3 + 1) / 2; // X, 따옴표 2개 총 3개 제외 (두 문자 당 1byte)
                         break;
                     }
                 }
@@ -612,20 +675,22 @@ int assem_pass1(const inst *inst_table[], int inst_table_length,
             }
         }
 
-        switch (dir) {
-        case DIR_EQU:
-        case DIR_RESW:
-        case DIR_RESB:
-            // locctr만 올리고 아무것도 하지 않음
-            --(*tokens_length);
-            free(tokens[*tokens_length]);
-        }
+        if (dir != DIR_LTORG) locctr += tok->size;
+
+        //switch (dir) {
+        //case DIR_EQU:
+        //case DIR_RESW:
+        //case DIR_RESB:
+        //    // locctr만 올리고 아무것도 하지 않음
+        //    --(*tokens_length);
+        //    free(tokens[*tokens_length]);
+        //}
     } // end for
 
     if ((err = set_literal_addr(&lit_last_idx, &locctr,
         tokens, tokens_length, literal_table, literal_table_length)) < 0) return err;
     // 길이 계산 편의를 위해 넣어줍니다.
-    if (insert_dummy_token(tokens, tokens_length, locctr) < 0) return -1;
+    // if (insert_dummy_token(tokens, tokens_length, locctr) < 0) return -1;
 
 #ifdef DEBUG
     // 토큰 테이블 출력
@@ -658,6 +723,7 @@ int token_parsing(const char *input, token *tok,
         tok->operand[i] = NULL;
     tok->nixbpe = 0;
     tok->operand_cnt = 0;
+    tok->size = 0;
 
     char label[10] = { 0 }, opr[10] = { 0 }, opnd[100] = { 0 }, comment[100] = { 0 };
     
@@ -701,15 +767,20 @@ int token_parsing(const char *input, token *tok,
     int inst_idx = search_opcode(opr, inst_table, inst_table_length);
     if (inst_idx >= 0 && tok->operand[0] != NULL) {
         char c = tok->operand[0][0];
-        if (c == '@') tok->nixbpe += (1 << 5);      // 10 0000
-        else if (c == '#') tok->nixbpe += (1 << 4); // 01 0000
-        else tok->nixbpe += (3 << 4);               // 11 0000
+        if (c == '@') tok->nixbpe |= 0x20;      // 10 0000
+        else if (c == '#') tok->nixbpe |= 0x10; // 01 0000
+        else tok->nixbpe |= 0x30;               // 11 0000
 
         if (opnd_cnt > 0 && strcmp(tok->operand[opnd_cnt - 1], "X") == 0) 
-            tok->nixbpe += (1 << 3); // 00 1000
+            tok->nixbpe |= (1 << 3); // 00 1000
     }
-    if (tok->operator != NULL && tok->operator[0] == '+')
-        tok->nixbpe += 1;
+    if (tok->operator != NULL && tok->operator[0] == '+') {
+        tok->nixbpe |= 1;
+    }
+    else {
+        // extended, immediate가 아니면 항상 pc relative라고 가정
+        tok->nixbpe |= 2;
+    }
     return 0;
 }
 
@@ -787,20 +858,27 @@ static int init_control_section(control_section* cs, int start_addr, const char*
     cs->modification_lines = 0;
     cs->define_lines = 0;
     cs->reference_lines = 0;
+    
+    for (int i = 0; i < 10; i++) {
+        cs->text[i] = NULL;
+        cs->modi[i] = NULL;
+        cs->define[i] = NULL;
+        cs->ref[i] = NULL;
+    }
     return 0;
 }
 
 /**
- * 
+ * 3형식 명령어를 object 코드로 변환합니다.
  */
-static int generate_instruction(char* dest, unsigned char op, char nixbpe, int pc, int operand_addr) {
+static int generate_instruction(char* dest, unsigned char op, char nixbpe, int displacement) {
     if (dest == NULL) return -1;
 
     unsigned int intr = 0; // 4byte
     intr += (op << 16);
     intr += (nixbpe << 12);
     if (nixbpe & 1) intr <<= 8; // extended이면 8 shift
-    intr |= operand_addr - pc; // todo: 음수일 때..
+    intr |= (nixbpe & 1) ? 0 : (displacement & 0xFFF);
 
     char buf[10];
     if (nixbpe & 1) {
@@ -857,54 +935,114 @@ int assem_pass2(const token *tokens[], int tokens_length,
         }
 
         if (dir == -1) {
-            // 리터럴인 경우
             if (tok->label != NULL && tok->label[0] == '*') {
+                // 리터럴인 경우
+                int idx;
+                if ((idx = search_literal(tok->operator, literal_table, literal_table_length)) == -1) return -1;
+                literal* lit = literal_table[idx];
 
-            }
-            else if (tok->operator == NULL) {
-                continue;
+                text_record* t;
+                if (cs->text_lines == 0 || cs->text[cs->text_lines - 1]->obj_length + lit->size * 2> 60) {
+                    if ((t = (text_record*)malloc(sizeof(text_record))) == NULL) return -1;
+                    t->start_addr = tok->addr;
+                    t->obj_length = 0;
+                    memset(t->obj, 0, sizeof(t->obj));
+                    cs->text[cs->text_lines] = t;
+                    ++cs->text_lines;
+                }
+                else {
+                    t = cs->text[cs->text_lines - 1];
+                }
+
+                
+                for (int i = 0; i < lit->size; i++) {
+                    char buf[3];
+                    sprintf(buf, "%02X", lit->bytes[i]);
+                    t->obj[t->obj_length] = buf[0];
+                    t->obj[t->obj_length + 1] = buf[1];
+                    t->obj_length += 2;
+                }
             }
             else {
+                // instruction인 경우
                 int inst_idx;
                 if ((inst_idx = search_opcode(tok->operator, inst_table, inst_table_length)) < 0) return -3;
                 inst* ins = inst_table[inst_idx];
+                
                 char* inst_str;
-                int bytes = (tok->nixbpe & 1) ? 4 : ins->format; // 해당 명령어가 차지하는 byte
+                if ((inst_str = (char*)malloc(tok->size * 2 + 1)) == NULL) return -2;
+                
+                if (tok->size == 2) {
+                    // 2형식일 때
+                    memset(inst_str, 0, sizeof(inst_str));
+                    inst_str[4] = '\0';
+                }
+                else {
+                    // 3형식일 때
+                    if (tok->nixbpe & 0x10 == 0x10) {
+                        // immediate
+                        if (generate_instruction(inst_str, ins->op, tok->nixbpe, atoi(tok->operand[0] + 1)) < 0)
+                            return -3;
+                    }
+                    else {
+                        // indirect & direct
+                        int operand_addr = -1; // 피연산자의 주소
+                        if (tok->operand[0] != NULL) {
+                            int idx = search_symbol_by_label(tok->operand[0], cs == NULL ? NULL : cs->header->program_name,
+                                symbol_table, symbol_table_length);
+                            
+                            if (idx == -1) {
+                                // todo modification: idx -1일 때
+                            }
+                            else {
+                                operand_addr = symbol_table[idx]->addr;
+                            }
+                        }
+                        int displacement = operand_addr == -1 ? 0 : operand_addr - (tok->addr + tok->size);
+                        if (generate_instruction(inst_str, ins->op, tok->nixbpe, displacement) < 0)
+                            return -3;
 
-                if ((inst_str = (char*)malloc(bytes * 2)) == NULL) return -2;
-
-                int operand_addr = 0;
-                if (tok->operand[0] != NULL) {
-                    for (int k = 0; k < symbol_table_length; k++) {
-                        symbol* sym = symbol_table[k];
-                        if (strcmp(sym->name, tok->operand[0]) == 0 &&
-                            (cs == NULL || strcmp(sym->csect_name, cs->header->program_name) == 0))
-                            operand_addr = sym->addr;
+                        if (tok->nixbpe & 1)
+                            inst_str[8] = '\0';
+                        else
+                            inst_str[6] = '\0';
                     }
                 }
-                if (generate_instruction(inst_str, ins->op, tok->nixbpe, tok->addr + bytes, operand_addr) < 0)
-                    return -3;
-                if (tok->nixbpe & 1)
-                    inst_str[8] = '\0';
-                else
-                    inst_str[6] = '\0';
                 printf("instruction: %s\n", inst_str);
+
+                /////////
+                text_record* t;
+                if (cs->text_lines == 0 || cs->text[cs->text_lines - 1]->obj_length + tok->size * 2 > 60) {
+                    if ((t = (text_record*)malloc(sizeof(text_record))) == NULL) return -1;
+                    t->start_addr = tok->addr;
+                    t->obj_length = 0;
+                    memset(t->obj, 0, sizeof(t->obj));
+                    cs->text[cs->text_lines] = t;
+                    ++cs->text_lines;
+                }
+                else {
+                    t = cs->text[cs->text_lines - 1];
+                }
+
+                for (int i = 0; i < tok->size * 2; i++) {
+                    char buf[3];
+                    sprintf(buf, "%c", inst_str[i]);
+                    t->obj[t->obj_length] = buf[0];
+                    t->obj_length++;
+                }
             }
 
             // 피연산자가 Reference 레코드에 있다면 Modification 레코드 추가
             if (ref != NULL) {
-                for (int j = 0; j < MAX_OPERAND_PER_INST && tok->operand[j] != NULL; j++) {
+                for (int j = 0; j < tok->operand_cnt; j++) {
                 }
             }
         }
         else {
+            // directive인 경우
             switch (dir) {
             case DIR_START:
             case DIR_CSECT:
-                if (cs != NULL && i > 0) {
-                    header_record* h = cs->header;
-                    h->program_length = tokens[i - 1]->addr; // 새로운 control section이 시작되기 전 이전 토큰의 주소가 해당 csect의 길이가 된다
-                }
                 if ((cs = (control_section*)malloc(sizeof(control_section))) == NULL)
                     return -2;
                 int start_addr = 0;
@@ -940,16 +1078,18 @@ int assem_pass2(const token *tokens[], int tokens_length,
                     ++cs->define_lines;
                 }
                 break;
+            case DIR_WORD:
+                // todo BUFEND-BUFFER 처리해주기
+                break;
             case DIR_END:
                 if (cs != NULL) {
                     header_record* h = cs->header;
-                    h->program_length = tokens[tokens_length - 1]->addr; // 프로그램이 완전히 끝나기 전 전 이전 토큰의 주소가 해당 csect의 길이가 된다
+                    h->program_length = tok->addr;
                 }
                 break;
             }
         }
     }
-    
 
     return 0;
 }
@@ -1070,7 +1210,7 @@ int make_objectcode_output(const char *objectcode_dir,
 
         for (int j = 0; j < cs->text_lines; j++) {
             text_record* t = cs->text[j];
-            fprintf(fp, "T%06X%02X%s\n", t->start_addr, t->bytes_length, t->obj);
+            fprintf(fp, "T%06X%02X%s\n", t->start_addr, t->obj_length / 2, t->obj);
         }
 
         for (int j = 0; j < cs->modification_lines; j++) {
