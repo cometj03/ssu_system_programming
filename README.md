@@ -6,8 +6,8 @@
 
 SIC/XE 소스코드를 object program으로 변환하는 어셈블러 구현하기 
 
-: (a) C로 구현 
-: (b) Java로 구현
+- (a) C로 구현
+- (b) Java로 구현
 
 ## Project 2
 
